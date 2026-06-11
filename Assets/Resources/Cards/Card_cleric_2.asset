@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
+  m_Name: Card_cleric_2
+  m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
+  cardId: cleric_2
+  cardName: Cleric x2
+  cardType: 0
+  artwork: {fileID: -4502726935913310248, guid: 6bbf77cd990caf749b1dd14413608a66, type: 3}
+  mpCost: 0
+  unitData:
+    attack: 65
+    hp: 1600
+    count: 2
+    spawnLine: 1
+    unitType: 0
+    moveSpeed: 245
+    attackRange: 260
+    attackCooldown: 1.4
+    attackSpeed: 1.8
+    projectileSpeed: 0
+    shadowScale: 1
+  supportEffects: []
+  idleSprite: {fileID: 5669913642837412506, guid: c5f97ec03c27ea44b947235087e53e74, type: 3}
+  attackFrames:
+  - {fileID: -1406262767752642419, guid: c5e47c56b12607f4193ac1f5021fbfd2, type: 3}
+  - {fileID: -896780559953893874, guid: 95db3252ebb480a4db4df4659c911dd4, type: 3}
+  projectileSprite: {fileID: 0}

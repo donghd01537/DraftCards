@@ -33,6 +33,7 @@
 sysinfo.txt
 *.stackdump
 [Mm]emoryCaptures/
+[Aa]ssets/_Recovery/
 
 # IDE/editor folders
 .vs/

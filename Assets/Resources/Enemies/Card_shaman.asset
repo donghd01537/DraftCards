@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: shaman
   cardName: Shaman
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: 4780709160577255157, guid: fe60baa7c60843f4a8257e5d42845cca, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 75
     hp: 1300
@@ -28,6 +33,7 @@ MonoBehaviour:
     attackCooldown: 1.2
     attackSpeed: 1.8
     projectileSpeed: 420
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: 4780709160577255157, guid: fe60baa7c60843f4a8257e5d42845cca, type: 3}
@@ -35,3 +41,6 @@ MonoBehaviour:
   - {fileID: 4780709160577255157, guid: fe60baa7c60843f4a8257e5d42845cca, type: 3}
   - {fileID: -7850565740860861583, guid: 1aef95c9791ba644da609e5d69996b65, type: 3}
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

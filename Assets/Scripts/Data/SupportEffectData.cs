@@ -12,5 +12,6 @@ namespace DraftCards.Data
         // RallyAllPlayerUnits, value = speed bonus (0.4 = +40%) and value2 =
         // how many seconds of combat the rally lasts. Unused by other effects.
         public float value2;
+        public float value3;
     }
 }

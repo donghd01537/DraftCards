@@ -73,6 +73,7 @@ namespace DraftCards.UI
                 txt.fontStyle = FontStyles.Bold;
                 txt.color = _textColor;
                 txt.alignment = TextAlignmentOptions.Center;
+                GameFonts.Apply(txt, GameFontRole.Normal);
                 txt.raycastTarget = false;
                 txt.outlineWidth = 0.2f;
                 txt.outlineColor = new Color32(0, 0, 0, 200);

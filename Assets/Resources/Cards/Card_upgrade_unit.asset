@@ -10,13 +10,21 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
-  m_Name: Card_duplicate
+  m_Name: Card_upgrade_unit
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
-  cardId: duplicate
-  cardName: Duplicate
+  cardId: upgrade_unit
+  cardName: Upgrade Unit
+  cardDescription: Upgrade a unit on the field. Cost rises each use.
+  cardArea: Ally unit
+  cardKind: Evolution
+  rulesText: Choose a unit family on the battlefield and upgrade it. First upgrade
+    grants +10% all stats; the next upgrade evolves the unit (e.g. Knight to Spartan),
+    permanently replacing it in your card pool. Costs 5 MP, rising by 1 each time
+    you use Upgrade this run.
   cardType: 1
-  artwork: {fileID: -6942802416177915674, guid: af2ab120c6c24174c9aa0678f3a67f56, type: 3}
-  mpCost: 6
+  artwork: {fileID: -1261122765604443207, guid: 8138ff418f751804d9137584572763d0, type: 3}
+  mpCost: 5
+  temporary: 0
   unitData:
     attack: 0
     hp: 0
@@ -28,11 +36,16 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1
     projectileSpeed: 650
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects:
-  - effectType: 6
-    value: 1
+  - effectType: 24
+    value: 0
     value2: 0
+    value3: 0
   idleSprite: {fileID: 0}
   attackFrames: []
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

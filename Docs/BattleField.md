@@ -1,10 +1,12 @@
 # How the Battle Field Works
 
-This document explains the battlefield: how units get there, how they fight, and how the round loop drives it. For card/unit authoring see [Units.md](Units.md); for gameplay rules see [Cards.md](Cards.md).
+This document explains the battlefield: how units get there, how they fight, and how the round loop drives it. For the overall game direction see [GameOverview.md](GameOverview.md); for card/unit authoring see [Units.md](Units.md); for gameplay rules see [Cards.md](Cards.md).
 
 ## Scene Flow
 
 The game opens in `Scenes/HomeScene.unity` — a title screen whose **Start** button calls [HomeScreen.StartGame](../Assets/Scripts/UI/HomeScreen.cs), which loads `BattlePrototype` (the battle scene below) via `SceneManager.LoadScene`. Both scenes are registered in Build Settings (HomeScene first, so builds boot to the title screen). The battle starts immediately on load — `GameManager.Start()` kicks off the round loop.
+
+Design target: a full stage should begin with deck and Commander preparation, then run through about 8-10 enemy waves. The current prototype starts directly from the generated player deck and uses 6 scripted waves that loop indefinitely.
 
 ## Two Layers: Logic vs. Visuals
 
@@ -26,16 +28,16 @@ A `UnitGroup` is created first (logic). The `BattlefieldManager` raises `OnUnitP
 
 ## The Round Loop
 
-[GameManager](../Assets/Scripts/Managers/GameManager.cs) is the conductor. It owns a [GameState](../Assets/Scripts/Core/Enums.cs) and runs an endless `draft → battle → reset` loop.
+[GameManager](../Assets/Scripts/Managers/GameManager.cs) is the conductor. It owns a [GameState](../Assets/Scripts/Core/Enums.cs) and runs the current prototype's endless `draft -> battle -> reset` loop.
 
 ```
 StartBattle()                       ← once, on Start()
   ├─ build deck, clear hand/MP
   ├─ _battlefieldManager.Clear()
   ├─ SpawnWave(round 0)             ← initial enemies
-  └─ BeginPlayerTurn()              ← draw 5, state = SelectCardPhase
+  └─ BeginPlayerTurn()              ← draw 3 units + 5 spells, state = SelectCardPhase
 
-… player drafts, previews a unit, presses END …
+... player drafts, previews a unit, presses FIGHT ...
 
 OnConfirmPressed() → EndTurnSequence() (coroutine):
   ├─ SummonPendingUnit()            ← pending build → real player UnitGroups
@@ -44,12 +46,12 @@ OnConfirmPressed() → EndTurnSequence() (coroutine):
   ├─ _roundIndex++; SpawnWave(_roundIndex) ← rebuild enemies for the new round
   ├─ ReviveAllDead()                ← dead PLAYER units come back at full HP
   ├─ RegroupAllUnits()              ← survivors snap into packed lane formation
-  └─ BeginPlayerTurn()              ← fresh hand, next round
+  └─ BeginPlayerTurn()              ← fresh hand, next wave
 ```
 
 `RunBattle()` flips every `BattleUnit` to active (`SetActive(true)`), then yields each frame while `BattlefieldView.BothSidesAlive` and `elapsed < _maxBattleSeconds` (default 30s timeout). When it ends it pauses all units and waits `_postBattlePause`.
 
-See [Cards.md](Cards.md) for the player-facing draft and reset rules this loop implements.
+See [Cards.md](Cards.md) for the player-facing draft and reset rules this loop implements. Future stage structure should keep the same planning-first rhythm: enemy wave appears, player draws 3 Unit Cards and 5 Spell Cards, adds up to one unit group, spends shared MP on spells and eventual Unit Upgrade, confirms, then combat resolves automatically.
 
 ## Lanes & Formation
 
@@ -70,7 +72,7 @@ When the player selects a Unit card, `CardPlayManager` raises `OnPendingBuildCha
 
 Previews are real `BattleUnit`s bound via `UnitGroupView.BindPreview` (tinted, inactive). They participate in separation so they spread out naturally.
 
-### Real units (on END)
+### Real units (on FIGHT)
 `SummonPendingUnit` consumes the pending build and creates one player `UnitGroup` per `count`. Each `PlaceUnit` raises `OnUnitPlaced` → `HandleUnitPlaced`, which:
 - Snapshots the previews' settled positions so real units take over the exact spots (`_previewPositions` / `_placementCursor`).
 - Otherwise finds an empty spot via `FindEmptyPosition`.
@@ -94,7 +96,7 @@ The whole fight is driven by `BattleUnit.Update()` running per-frame on each act
 4. **Move** — sum separation + move + settle, **clamp the combined speed to `_maxSpeed`** (so a pile-up of pushes can't fling a unit across the field), then apply, clamped to bounds. A debounced moving/idle flag drives the walk bounce via `MoveBounceAnimator`.
 
 ### Attacking & damage
-`PerformAttack` plays the attack frame animation (`UnitGroupView.PlayAttack`) and calls `target.TakeDamage(Group.TotalDamage)`. `TotalDamage = Attack × Count` (Count is 1, so it's just `Attack`). `BattleUnit.TakeDamage` applies it to the `UnitGroup`; if HP hits 0, it notifies death.
+`PerformAttack` plays the attack frame animation (`UnitGroupView.PlayAttack`) and either calls `target.TakeDamage(Group.TotalDamage)` immediately for melee units, or launches the configured projectile sprite and applies damage on impact. `TotalDamage = Attack × Count` (Count is 1, so it's just `Attack`). `BattleUnit.TakeDamage` applies it to the `UnitGroup`; if HP hits 0, it notifies death. Direct projectiles such as arrows calculate one intercept point from the target's current velocity, fly there at fixed speed, and can miss if the target moves away; lobbed projectiles with `projectileAoeRadius > 0` deal splash damage around the impact point.
 
 The melee swing plays for a **fixed** `_meleeAttackDuration` (clamped below the cooldown), not a fraction of it — otherwise fast attackers (e.g. a Goblin at a 0.4s effective cooldown) flash the strike pose for a tenth of a second and look idle while swarming. Ranged throwers use the analogous fixed `_projectileThrowDuration` instead.
 
@@ -132,12 +134,35 @@ Enemies are not drafted — `GameManager` scripts them per round in a static `_w
 
 ## Spells on the Battlefield
 
-Spell cards act on units already on the field, via `BattlefieldView`:
+Spell cards act on units already on the field, pending previews, or battlefield-level turn state:
 
-- **Duplicate** (`DuplicatePlayerUnits`) — for every living player unit in a lane, clone its `UnitGroup` and spawn a matching `BattleUnit` nearby. Also duplicates pending previews.
-- **Strengthen** (`StrengthenPlayerUnits`) — multiplies `Attack` on every living player unit (and the pending build) via `UnitGroup.ApplyAttackMultiplier`.
+- **Mark** (`MarkEnemyLine`) marks enemies in a selected enemy lane so they take bonus damage.
+- **Quick Shield** / **Barrier** (`ShieldPlayerLine`) arm combat-time shields on a selected player lane.
+- **Meteor** (`MeteorEnemyLine`) arms a battle-start spell: 1 second after combat begins, meteors fall onto the selected enemy lane, explode, and gain extra bonus against marked targets. Fireball still uses the immediate `DamageEnemyLine` shape, but is currently excluded from the deck.
+- **Slow Field** (`SlowEnemyOpeningLines`) slows enemies in the front and middle lanes for the opening combat window.
+- **Fortify** (`ReduceFrontLineDamage`) gives front-line player units damage reduction, but is currently excluded from the deck.
+- **Rally** (`RallyPlayerLine`) applies a temporary move-speed and attack-speed boost to a selected player lane.
+- **Revive** (`RevivePlayerUnits`) arms a one-turn resurrection budget for the first player units that fall during the next battle.
+- **Lightning Strike** (`LightningStrikePriorityEnemies`) arms battle-start strikes against high-priority living enemies, favoring support/ranged/backline threats.
+- **Duplicated** (`DuplicatePlayerUnits`) clones every current unit from a selected player lane for the current battle only, including pending first-wave preview units before FIGHT.
 
-Both play a `SpawnEffect` floating-text burst at the affected lane/center.
+These spells play a `SpawnEffect` floating-text burst at the affected lane/center or impact point.
+
+### Battlefield VFX conventions
+
+Spell and unit-feedback VFX are visual-only. They should not change `UnitGroup` state or battle rules; put gameplay state on `UnitGroup` / managers, and put presentation on `BattlefieldView` or `UnitGroupView`.
+
+- Use **one group-level effect** for spells that affect a group or lane. Compute the center from the affected `BattleUnit.Rect.anchoredPosition` values, then spawn a single battlefield-root effect there.
+- Use **per-unit feedback** only as a small secondary cue (flash, tint, scale pulse), so small units stay readable and a group spell does not become noisy.
+- Prefer procedural UI sprites for simple battlefield effects (rings, glows, sparks, beams) when no authored art is needed. Optional sprites are fine for replaceable icons, but the effect should have a code fallback.
+- Group effects should parent under `_battleFieldRoot`, use anchored positions, set `raycastTarget = false`, and clean themselves up after their short animation.
+
+Current examples:
+
+- `SpawnEffect` - floating text / smoke bursts for spell labels.
+- `BattlefieldMarkVfx` in `BattlefieldView` - Mark feedback: one shrinking aim reticle over the selected enemy lane.
+- `BattlefieldLevelUpVfx` in `BattlefieldView` - Upgrade Unit feedback: one golden group VFX at the affected family's center plus `UnitGroupView.PlayLevelUpPulse()` on each affected unit/preview.
+- Lightning helpers in `BattlefieldView` - procedural beam, burst, branches, and impact ring.
 
 ## Key Tunables
 
@@ -170,8 +195,8 @@ Scripts/
     BattleUnit.cs           per-frame movement / targeting / attack / death
     BattleResolver.cs       (unused legacy)
   UI/
-    BattlefieldView.cs      spawn, position, spatial queries, preview, revive, regroup
-    UnitGroupView.cs        sprite frames, highlight, scale
+    BattlefieldView.cs      spawn, position, spatial queries, preview, revive, regroup, battlefield VFX
+    UnitGroupView.cs        sprite frames, highlight, scale, per-unit visual pulses
     FormationLineView.cs    a lane anchor in the scene
     SpriteFrameAnimator.cs  idle ↔ attack frame swapping
     MoveBounceAnimator.cs   walk bounce

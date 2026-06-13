@@ -16,15 +16,15 @@ namespace DraftCards.UI
         [SerializeField] private HandManager _handManager;
         [SerializeField] private CardPlayManager _cardPlayManager;
         [SerializeField] private GameManager _gameManager;
-        [SerializeField] private DeckManager _deckManager;
         [SerializeField] private BattlefieldView _battlefieldView;
 
         [SerializeField] private Transform _handContainer;
         [SerializeField] private CardView _cardViewPrefab;
         [SerializeField] private PreviewPanel _previewPanel;
         [SerializeField] private TMP_Text _mpText;
-        [SerializeField] private TMP_Text _deckCountText;
         [SerializeField] private Button _endButton;
+        [SerializeField] private UpgradeSelectionPanel _upgradePanel;
+        [SerializeField] private EmergencySelectionPanel _emergencyPanel;
 
         [Header("Hand fan layout")]
         [SerializeField] private float _fanSpacing = 130f;
@@ -56,8 +56,46 @@ namespace DraftCards.UI
             }
             if (_gameManager != null) _gameManager.OnStateChanged += HandleStateChanged;
 
+            EnsureUpgradePanel();
+            EnsureEmergencyPanel();
+
             if (_mpManager != null) RefreshMp(_mpManager.CurrentMp, _mpManager.MaxMp);
             _previewPanel?.ShowEmpty();
+        }
+
+        // The Upgrade Unit spell opens a modal target picker. If the scene doesn't author one,
+        // create it at runtime and hand it the refs it needs (it builds its own UI on first use).
+        private void EnsureUpgradePanel()
+        {
+            if (_upgradePanel == null)
+            {
+                _upgradePanel = FindFirstObjectByType<UpgradeSelectionPanel>();
+            }
+            if (_upgradePanel == null)
+            {
+                GameObject go = new("UpgradeSelectionPanel");
+                go.transform.SetParent(transform, false);
+                _upgradePanel = go.AddComponent<UpgradeSelectionPanel>();
+            }
+            _upgradePanel.Configure(_cardPlayManager, _cardViewPrefab);
+        }
+
+        // The Emergency Draft spell opens its own modal unit picker. Same self-building pattern as
+        // the upgrade panel: create it at runtime if the scene doesn't author one, then hand it
+        // the refs it needs (it builds its own UI on first use).
+        private void EnsureEmergencyPanel()
+        {
+            if (_emergencyPanel == null)
+            {
+                _emergencyPanel = FindFirstObjectByType<EmergencySelectionPanel>();
+            }
+            if (_emergencyPanel == null)
+            {
+                GameObject go = new("EmergencySelectionPanel");
+                go.transform.SetParent(transform, false);
+                _emergencyPanel = go.AddComponent<EmergencySelectionPanel>();
+            }
+            _emergencyPanel.Configure(_cardPlayManager, _cardViewPrefab);
         }
 
         private void OnDisable()
@@ -108,12 +146,6 @@ namespace DraftCards.UI
             }
         }
 
-        private void RefreshDeckCount()
-        {
-            if (_deckCountText == null || _deckManager == null) return;
-            _deckCountText.text = _deckManager.DrawPileCount.ToString();
-        }
-
         private void RefreshHand()
         {
             foreach (CardView view in _cardViews)
@@ -133,6 +165,12 @@ namespace DraftCards.UI
                 CardData card = _handManager.Cards[i];
                 CardView view = Instantiate(_cardViewPrefab, _handContainer);
                 view.Bind(card);
+                // The Upgrade card's cost escalates each use, so show the live cost, not the
+                // static config value.
+                if (_cardPlayManager != null && CardPlayManager.IsUpgradeUnitCard(card))
+                {
+                    view.SetCostOverride(_cardPlayManager.EffectiveMpCost(card));
+                }
                 view.OnClicked += HandleCardClicked;
                 view.OnDragStarted += HandleCardDragStarted;
                 view.OnDragMoved += HandleCardDragMoved;
@@ -144,7 +182,6 @@ namespace DraftCards.UI
             }
 
             RefreshHandInteractable();
-            RefreshDeckCount();
         }
 
         private void PositionInFan(CardView view, int index, int total)
@@ -231,21 +268,26 @@ namespace DraftCards.UI
 
         private void HandleCardDragStarted(CardView view, CardData card)
         {
-            bool requires = RequiresLaneTarget(card);
+            bool requires = CardPlayManager.RequiresLaneTarget(card);
+            bool targetsEnemy = CardPlayManager.TargetsEnemyLane(card);
             _lastHoveredDragLane = null;
-            Debug.Log($"[UIManager] DragStarted card={card?.cardName} requiresLane={requires} battlefieldView={(_battlefieldView != null ? "OK" : "NULL")}");
+            Debug.Log($"[UIManager] DragStarted card={card?.cardName} requiresLane={requires} targetsEnemy={targetsEnemy} battlefieldView={(_battlefieldView != null ? "OK" : "NULL")}");
             if (_battlefieldView == null) return;
             if (requires)
             {
-                _battlefieldView.ShowPlayerLaneTargets();
+                if (targetsEnemy) _battlefieldView.ShowEnemyLaneTargets();
+                else _battlefieldView.ShowPlayerLaneTargets();
             }
         }
 
         private void HandleCardDragMoved(CardView view, CardData card, Vector2 screenPos)
         {
             if (_battlefieldView == null) return;
-            if (!RequiresLaneTarget(card)) return;
-            FormationLine? lane = _battlefieldView.FindPlayerLaneAtScreenPoint(screenPos);
+            if (!CardPlayManager.RequiresLaneTarget(card)) return;
+            bool targetsEnemy = CardPlayManager.TargetsEnemyLane(card);
+            FormationLine? lane = targetsEnemy
+                ? _battlefieldView.FindEnemyLaneAtScreenPoint(screenPos)
+                : _battlefieldView.FindPlayerLaneAtScreenPoint(screenPos);
             _lastHoveredDragLane = lane;
             _battlefieldView.HighlightHoveredLane(lane);
         }
@@ -257,17 +299,6 @@ namespace DraftCards.UI
             bool inZone = screenPos.y < threshold;
             Debug.Log($"[UIManager] IsInCancelZone screenY={screenPos.y} screenH={Screen.height} threshold={threshold} fraction={fraction} → {inZone}");
             return inZone;
-        }
-
-        private static bool RequiresLaneTarget(CardData card)
-        {
-            if (card == null || card.cardType != CardType.Support) return false;
-            if (card.supportEffects == null) return false;
-            foreach (SupportEffectData e in card.supportEffects)
-            {
-                if (e.effectType == SupportEffectType.DuplicateAllPlayerUnits) return true;
-            }
-            return false;
         }
 
         private void HandleCardDragReleased(CardView view, CardData card, Vector2 screenPos)
@@ -300,13 +331,15 @@ namespace DraftCards.UI
             DraftCards.Core.FormationLine? targetLane = _lastHoveredDragLane;
             if (!targetLane.HasValue && _battlefieldView != null)
             {
-                targetLane = _battlefieldView.FindPlayerLaneAtScreenPoint(screenPos);
+                targetLane = CardPlayManager.TargetsEnemyLane(card)
+                    ? _battlefieldView.FindEnemyLaneAtScreenPoint(screenPos)
+                    : _battlefieldView.FindPlayerLaneAtScreenPoint(screenPos);
             }
             _lastHoveredDragLane = null;
             Debug.Log($"[UIManager] Resolved targetLane={(targetLane.HasValue ? targetLane.Value.ToString() : "null")}");
 
             // Lane-target spells (Duplicate): if user dropped off-lane, treat as cancel.
-            if (RequiresLaneTarget(card) && !targetLane.HasValue)
+            if (CardPlayManager.RequiresLaneTarget(card) && !targetLane.HasValue)
             {
                 Debug.Log("[UIManager] Lane-target spell dropped off-lane — cancelling");
                 view.SnapBackToLayout();

@@ -1,10 +1,10 @@
 {
-  "_comment": "Balanced baseline v1. Player units are stronger individually, enemies scale by count and formation. Keep Cyclop rare. Duplicate is expensive because it doubles all living player units.",
+  "_comment": "Balanced baseline v2. Player units are stronger individually, enemies scale by count and formation. Spell art is background-only; name, MP, metadata, and descriptions are generated from this config.",
 
   "units": [
     {
-      "id": "knight_3",
-      "name": "Knight x3",
+      "id": "swordsman_3",
+      "name": "Swordsman x3",
       "characterFolder": "Knight",
       "spriteFile": "Units/Knight_3.png",
       "attack": 110,
@@ -15,7 +15,29 @@
       "attackRange": 80,
       "attackCooldown": 1.2,
       "attackSpeed": 1.8,
-      "unitType": "Ground"
+      "unitType": "Ground",
+      "familyRootId": "swordsman_3",
+      "evolution": [
+        { "statMultiplier": 1.10 },
+        { "statMultiplier": 1.0, "evolveToId": "spartan_3" }
+      ]
+    },
+    {
+      "id": "spartan_3",
+      "name": "Spartan x3",
+      "characterFolder": "Spartan",
+      "spriteFile": "Units/Spartan_3.png",
+      "attack": 121,
+      "hp": 2860,
+      "count": 3,
+      "line": "Front",
+      "moveSpeed": 253,
+      "attackRange": 88,
+      "attackCooldown": 1.2,
+      "attackSpeed": 1.98,
+      "unitType": "Ground",
+      "familyRootId": "swordsman_3",
+      "excludeFromInitialDeck": true
     },
     {
       "id": "archer_2",
@@ -32,7 +54,8 @@
       "attackSpeed": 2.0,
       "unitType": "Ground",
       "projectileSprite": "Arrow.png",
-      "projectileSpeed": 500
+      "projectileSpeed": 500,
+      "projectileAoeRadius": 0
     },
     {
       "id": "cleric_2",
@@ -78,7 +101,8 @@
       "attackSpeed": 1.8,
       "unitType": "Ground",
       "projectileSprite": "Arrow.png",
-      "projectileSpeed": 480
+      "projectileSpeed": 480,
+      "projectileAoeRadius": 0
     },
     {
       "id": "orc",
@@ -119,7 +143,8 @@
       "attackSpeed": 1.8,
       "unitType": "Ground",
       "projectileSprite": "Magic.png",
-      "projectileSpeed": 420
+      "projectileSpeed": 420,
+      "projectileAoeRadius": 0
     },
     {
       "id": "cyclop",
@@ -135,52 +160,203 @@
       "unitType": "Ground",
       "projectileSprite": "Rock.png",
       "projectileSpeed": 330,
+      "projectileAoeRadius": 140,
       "shadowScale": 1.3
     }
   ],
 
   "supports": [
     {
-      "id": "duplicate",
-      "name": "Duplicate",
-      "mpCost": 6,
-      "effectType": "DuplicateAllPlayerUnits",
-      "value": 1.0,
-      "spriteFile": "Spells/Duplicate.png"
+      "id": "mark",
+      "name": "Mark",
+      "mpCost": 1,
+      "area": "Enemy line",
+      "spellType": "Setup",
+      "shortDescription": "Marked enemies take more damage.",
+      "description": "Mark all enemies in selected line. Marked enemies take bonus damage.",
+      "effectType": "MarkEnemyLine",
+      "value": 0.25,
+      "spriteFile": "Spells/Mark.png"
     },
     {
-      "id": "strengthen",
-      "name": "Strengthen",
+      "id": "quick_shield",
+      "name": "Quick Shield",
+      "mpCost": 1,
+      "area": "Ally line",
+      "spellType": "Defense",
+      "shortDescription": "Give a small shield to one ally line.",
+      "description": "Give small shield to all units in selected ally line.",
+      "effectType": "ShieldPlayerLine",
+      "value": 2.0,
+      "spriteFile": "Spells/QuickShield.png"
+    },
+    {
+      "id": "lucky_draw",
+      "name": "Lucky Draw",
+      "mpCost": 1,
+      "area": "Player hand",
+      "spellType": "Gamble",
+      "shortDescription": "Draw 2 spells. First drawn spell costs 2 less.",
+      "description": "Draw 2 random Spell Cards. The first drawn Spell costs -2 MP this wave. Drawn cards can duplicate existing cards.",
+      "effectType": "DrawTemporarySpellCards",
+      "value": 2,
+      "value2": 2,
+      "spriteFile": "Spells/LuckyDraw.png"
+    },
+    {
+      "id": "mana_crystal",
+      "name": "Mana Crystal",
+      "mpCost": 2,
+      "area": "Player economy",
+      "spellType": "Scaling",
+      "shortDescription": "Increase Max MP by 1 next wave.",
+      "description": "Increase Max MP by +1 starting next wave.",
+      "effectType": "IncreaseMaxMpNextTurn",
+      "value": 1,
+      "spriteFile": "Spells/ManaCrystal.png"
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
       "mpCost": 3,
-      "effectType": "StrengthenAllPlayerUnits",
-      "value": 0.35,
-      "spriteFile": "Spells/Strengthen.png"
+      "area": "Enemy Middle area",
+      "spellType": "Damage",
+      "shortDescription": "Deal fire damage to enemy Middle area.",
+      "description": "Deal medium fire damage to enemies in the Middle area.",
+      "effectType": "DamageEnemyLine",
+      "value": 650,
+      "value2": 1,
+      "excludeFromInitialDeck": true,
+      "spriteFile": "Spells/Fireball.png"
+    },
+    {
+      "id": "slow_field",
+      "name": "Slow Field",
+      "mpCost": 3,
+      "area": "Enemy Front + Middle path",
+      "spellType": "Control",
+      "shortDescription": "Slow enemies in Front and Middle path.",
+      "description": "Slow enemies in the affected path during the opening seconds.",
+      "effectType": "SlowEnemyOpeningLines",
+      "value": 0.4,
+      "value2": 4.0,
+      "spriteFile": "Spells/SlowField.png"
     },
     {
       "id": "fortify",
       "name": "Fortify",
-      "mpCost": 2,
-      "effectType": "ShieldFrontLine",
-      "value": 3.5,
+      "mpCost": 3,
+      "area": "Ally Front line",
+      "spellType": "Defense",
+      "shortDescription": "Increase defense of your Front line.",
+      "description": "Increase defense / damage reduction for all Front units.",
+      "effectType": "ReduceDamageFrontLine",
+      "value": 0.35,
+      "excludeFromInitialDeck": true,
       "spriteFile": "Spells/Fortify.png"
     },
     {
       "id": "rally",
       "name": "Rally",
-      "mpCost": 2,
-      "effectType": "RallyAllPlayerUnits",
-      "value": 0.3,
-      "value2": 3.5,
+      "mpCost": 3,
+      "area": "Ally line",
+      "spellType": "Buff",
+      "shortDescription": "Increase attack speed of one ally line.",
+      "description": "Increase attack speed for all units in selected ally line.",
+      "effectType": "RallyPlayerLine",
+      "value": 0.35,
+      "value2": 4.0,
       "spriteFile": "Spells/Rally.png"
+    },
+    {
+      "id": "barrier",
+      "name": "Barrier",
+      "mpCost": 4,
+      "area": "Ally line",
+      "spellType": "Defense",
+      "shortDescription": "Give a medium shield to one ally line.",
+      "description": "Give medium shield to all units in selected ally line.",
+      "effectType": "ShieldPlayerLine",
+      "value": 4.0,
+      "spriteFile": "Spells/Barrier.png"
+    },
+    {
+      "id": "lightning_strike",
+      "name": "Lightning Strike",
+      "mpCost": 4,
+      "area": "Priority enemy area",
+      "spellType": "Damage",
+      "shortDescription": "Strike 1-2 high-threat enemies.",
+      "description": "Hit 1-2 high-threat enemies, prioritizing ranged, support, or elite enemies.",
+      "effectType": "LightningStrikePriorityEnemies",
+      "value": 750,
+      "value2": 2,
+      "spriteFile": "Spells/LightningStrike.png",
+      "projectileSprite": "LightningBolt.png"
     },
     {
       "id": "revive",
       "name": "Revive",
-      "mpCost": 3,
+      "mpCost": 5,
+      "area": "All ally lines",
+      "spellType": "Recovery",
+      "shortDescription": "Revive limited fallen units once.",
+      "description": "Revive a limited number of fallen units during battle.",
       "effectType": "ReviveFirstDead",
-      "value": 3,
+      "value": 2,
       "value2": 0.5,
       "spriteFile": "Spells/Revive.png"
+    },
+    {
+      "id": "meteor",
+      "name": "Meteor",
+      "mpCost": 5,
+      "area": "Enemy line",
+      "spellType": "Big damage",
+      "shortDescription": "Drop meteors on one enemy line after battle starts.",
+      "description": "At battle start +1s, call meteors onto the selected enemy line. Deals bonus damage if the line is Marked.",
+      "effectType": "MeteorEnemyLine",
+      "value": 1400,
+      "value2": -1,
+      "value3": 0.5,
+      "spriteFile": "Spells/Meteor.png"
+    },
+    {
+      "id": "emergency_draft",
+      "name": "Emergency Draft",
+      "mpCost": 6,
+      "area": "Unit reinforcement",
+      "spellType": "Temporary units",
+      "shortDescription": "Summon a temporary unit for this wave.",
+      "description": "Roll 2 random units and pick 1. It joins the battle this wave only and is removed when the wave ends. Does not use your unit pick.",
+      "effectType": "EmergencyDraftUnits",
+      "value": 2,
+      "value2": 0,
+      "spriteFile": "Spells/EmergencyDraft.png"
+    },
+    {
+      "id": "duplicated",
+      "name": "Duplicated",
+      "mpCost": 6,
+      "area": "Ally line",
+      "spellType": "Army swing",
+      "shortDescription": "Duplicate current units on one ally line this battle.",
+      "description": "Temporarily duplicate all current units on selected ally line for this battle only.",
+      "effectType": "DuplicatePlayerLineLimited",
+      "value": 0,
+      "spriteFile": "Spells/Duplicated.png"
+    },
+    {
+      "id": "upgrade_unit",
+      "name": "Upgrade Unit",
+      "mpCost": 5,
+      "area": "Ally unit",
+      "spellType": "Evolution",
+      "shortDescription": "Upgrade a unit on the field. Cost rises each use.",
+      "description": "Choose a unit family on the battlefield and upgrade it. First upgrade grants +10% all stats; the next upgrade evolves the unit (e.g. Knight to Spartan), permanently replacing it in your card pool. Costs 5 MP, rising by 1 each time you use Upgrade this run.",
+      "effectType": "UpgradeUnit",
+      "value": 0,
+      "spriteFile": "Spells/UpgradeUnit.png"
     }
   ]
 }

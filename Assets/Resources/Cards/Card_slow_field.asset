@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
+  m_Name: Card_slow_field
+  m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
+  cardId: slow_field
+  cardName: Slow Field
+  cardDescription: Slow enemies in Front and Middle path.
+  cardArea: Enemy Front + Middle path
+  cardKind: Control
+  rulesText: Slow enemies in the affected path during the opening seconds.
+  cardType: 1
+  artwork: {fileID: 5555242133445426627, guid: 1de8b52f6c9460c4a81eb2ad42373278, type: 3}
+  mpCost: 3
+  temporary: 0
+  unitData:
+    attack: 0
+    hp: 0
+    count: 0
+    spawnLine: 0
+    unitType: 0
+    moveSpeed: 120
+    attackRange: 40
+    attackCooldown: 1
+    attackSpeed: 1
+    projectileSpeed: 650
+    projectileAoeRadius: 0
+    shadowScale: 1
+  supportEffects:
+  - effectType: 19
+    value: 0.4
+    value2: 4
+    value3: 0
+  idleSprite: {fileID: 0}
+  attackFrames: []
+  projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

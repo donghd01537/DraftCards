@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: cyclop
   cardName: Cyclop
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: -2130690706031634848, guid: f1d40282f0da73e459560e9784ae2d04, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 140
     hp: 4800
@@ -28,6 +33,7 @@ MonoBehaviour:
     attackCooldown: 1.1
     attackSpeed: 1.2
     projectileSpeed: 330
+    projectileAoeRadius: 140
     shadowScale: 1.3
   supportEffects: []
   idleSprite: {fileID: -2130690706031634848, guid: f1d40282f0da73e459560e9784ae2d04, type: 3}
@@ -35,3 +41,6 @@ MonoBehaviour:
   - {fileID: -2130690706031634848, guid: f1d40282f0da73e459560e9784ae2d04, type: 3}
   - {fileID: -5002014958038048135, guid: c51062528212fa54da4d0997292de953, type: 3}
   projectileSprite: {fileID: 3452003437791708593, guid: 73841ff19a1b2a34ba1b94329267427d, type: 3}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

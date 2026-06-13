@@ -25,7 +25,22 @@ namespace DraftCards.Core
         StrengthenAllPlayerUnits,
         ShieldFrontLine,
         RallyAllPlayerUnits,
-        ReviveFirstDead
+        ReviveFirstDead,
+        LightningStrikePriorityEnemy,
+        MarkEnemyLine,
+        ShieldPlayerLine,
+        DuplicatePlayerLineLimited,
+        DrawTemporarySpellCards,
+        HoldSpellForNextTurn,
+        IncreaseMaxMpNextTurn,
+        DamageEnemyLine,
+        SlowEnemyOpeningLines,
+        ReduceDamageFrontLine,
+        RallyPlayerLine,
+        LightningStrikePriorityEnemies,
+        EmergencyDraftUnits,
+        UpgradeUnit,
+        MeteorEnemyLine
     }
 
     public enum UnitType

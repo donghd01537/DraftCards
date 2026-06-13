@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: fortify
   cardName: Fortify
+  cardDescription: Increase defense of your Front line.
+  cardArea: Ally Front line
+  cardKind: Defense
+  rulesText: Increase defense / damage reduction for all Front units.
   cardType: 1
   artwork: {fileID: 4870125245114056259, guid: 0bdfcadf28075eb40bdf01d1c330d471, type: 3}
-  mpCost: 2
+  mpCost: 3
+  temporary: 0
   unitData:
     attack: 0
     hp: 0
@@ -28,11 +33,16 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1
     projectileSpeed: 650
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects:
-  - effectType: 8
-    value: 3.5
+  - effectType: 20
+    value: 0.35
     value2: 0
+    value3: 0
   idleSprite: {fileID: 0}
   attackFrames: []
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 1
+  familyRootId: 

@@ -9,6 +9,7 @@ namespace DraftCards.Managers
         [SerializeField] private int _maxMp = 10;
 
         private int _currentMp;
+        private int _pendingMaxMpIncrease;
 
         public event Action<int, int> OnMpChanged;
 
@@ -50,8 +51,23 @@ namespace DraftCards.Managers
 
         public void ResetForNewTurn()
         {
+            if (_pendingMaxMpIncrease > 0)
+            {
+                _maxMp += _pendingMaxMpIncrease;
+                _pendingMaxMpIncrease = 0;
+            }
             _currentMp = _maxMp;
             OnMpChanged?.Invoke(_currentMp, _maxMp);
+        }
+
+        public void IncreaseMaxMpNextTurn(int amount)
+        {
+            if (amount <= 0)
+            {
+                return;
+            }
+
+            _pendingMaxMpIncrease += amount;
         }
     }
 }

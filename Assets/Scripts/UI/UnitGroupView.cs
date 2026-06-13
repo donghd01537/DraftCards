@@ -40,7 +40,11 @@ namespace DraftCards.UI
         // Per-Image material instances that drive the white hit flash (one per slot).
         private readonly List<Material> _flashMaterials = new();
         private Coroutine _flashRoutine;
+        private Coroutine _levelUpPulseRoutine;
         private MoveBounceAnimator _moveAnimator;
+        private bool _highlighted;
+        private bool _slowTintActive;
+        private Color _baseSpriteTint = Color.white;
 
         // Fortify shield bubble: a soft, pulsing dome drawn over the unit while the
         // Fortify immunity window is active. Built lazily the first time it's shown.
@@ -74,12 +78,6 @@ namespace DraftCards.UI
             RebuildSprites(1, build.idleSprite, build.attackFrames, isPreview: true);
         }
 
-        public void RefreshFromUnit(UnitGroup unit)
-        {
-            _shadowScale = unit.ShadowScale;
-            RebuildSprites(1, unit.IdleSprite, unit.AttackFrames, isPreview: false);
-        }
-
         public void PlayAttack(float duration)
         {
             foreach (SpriteFrameAnimator anim in _frameAnimators)
@@ -105,6 +103,13 @@ namespace DraftCards.UI
             _flashRoutine = StartCoroutine(HitFlashRoutine());
         }
 
+        public void PlayLevelUpPulse()
+        {
+            PlayHitFlash();
+            if (_levelUpPulseRoutine != null) StopCoroutine(_levelUpPulseRoutine);
+            _levelUpPulseRoutine = StartCoroutine(LevelUpPulseRoutine());
+        }
+
         private IEnumerator HitFlashRoutine()
         {
             float peak = Mathf.Clamp01(_hitFlashPeak);
@@ -119,6 +124,27 @@ namespace DraftCards.UI
             }
             SetFlashAmount(0f);
             _flashRoutine = null;
+        }
+
+        private IEnumerator LevelUpPulseRoutine()
+        {
+            Transform target = transform;
+            Vector3 baseScale = target.localScale;
+            Vector3 peakScale = baseScale * 1.14f;
+            const float duration = 0.34f;
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float u = Mathf.Clamp01(elapsed / duration);
+                float pulse = Mathf.Sin(u * Mathf.PI);
+                target.localScale = Vector3.Lerp(baseScale, peakScale, pulse);
+                yield return null;
+            }
+
+            target.localScale = baseScale;
+            _levelUpPulseRoutine = null;
         }
 
         private void SetFlashAmount(float amount)
@@ -142,11 +168,34 @@ namespace DraftCards.UI
                 StopCoroutine(_shieldPulseRoutine);
                 _shieldPulseRoutine = null;
             }
+            if (_levelUpPulseRoutine != null)
+            {
+                StopCoroutine(_levelUpPulseRoutine);
+                _levelUpPulseRoutine = null;
+            }
         }
 
         public void SetHighlight(bool highlighted)
         {
-            Color tint = highlighted ? new Color(1f, 0.9f, 0.35f, 1f) : Color.white;
+            _highlighted = highlighted;
+            ApplySpriteTint();
+        }
+
+        public void SetSlowTint(bool active)
+        {
+            _slowTintActive = active;
+            ApplySpriteTint();
+        }
+
+        private void ApplySpriteTint()
+        {
+            Color tint = _slowTintActive ? new Color(0.46f, 0.78f, 1f, 1f) : _baseSpriteTint;
+            if (_highlighted)
+            {
+                tint = Color.Lerp(tint, new Color(1f, 0.9f, 0.35f, 1f), 0.55f);
+                tint.a = 1f;
+            }
+
             foreach (GameObject slot in _spriteInstances)
             {
                 if (slot == null) continue;
@@ -294,6 +343,7 @@ namespace DraftCards.UI
             _spriteInstances.Clear();
             _frameAnimators.Clear();
             _flashMaterials.Clear();
+            _baseSpriteTint = isPreview ? _previewTint : Color.white;
 
             if (_flashShader == null) _flashShader = Shader.Find("DraftCards/UIHitFlash");
 
@@ -311,7 +361,6 @@ namespace DraftCards.UI
                 Image image = slot.AddComponent<Image>();
                 image.preserveAspect = true;
                 image.raycastTarget = false;
-                image.color = isPreview ? _previewTint : Color.white;
 
                 // Give each Image its own flash material so the white blink can be driven
                 // per unit without touching the shared default UI material.
@@ -338,6 +387,7 @@ namespace DraftCards.UI
                 _spriteInstances.Add(slot);
             }
 
+            ApplySpriteTint();
             PositionShadowUnder(idleSprite);
         }
 

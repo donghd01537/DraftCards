@@ -10,13 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
-  m_Name: Card_knight_3
+  m_Name: Card_swordsman_3
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
-  cardId: knight_3
-  cardName: Knight x3
+  cardId: swordsman_3
+  cardName: Swordsman x3
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: -7545006596017091847, guid: 39f161491fdcb6140a341ff24297ce01, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 110
     hp: 2600
@@ -28,6 +33,7 @@ MonoBehaviour:
     attackCooldown: 1.2
     attackSpeed: 1.8
     projectileSpeed: 0
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: -7741508761955984946, guid: 49fc82c7f2d9aa449ba637f9db575ac8, type: 3}
@@ -35,3 +41,10 @@ MonoBehaviour:
   - {fileID: 1988080426221799119, guid: c60a97c412ce40c4a811fd88f2e15371, type: 3}
   - {fileID: -3484685789492208550, guid: d14e133293bd49d428dd9ae3f0722e68, type: 3}
   projectileSprite: {fileID: 0}
+  evolutionLevels:
+  - statMultiplier: 1.1
+    evolveToId: 
+  - statMultiplier: 1
+    evolveToId: spartan_3
+  excludeFromInitialDeck: 0
+  familyRootId: swordsman_3

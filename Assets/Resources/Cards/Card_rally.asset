@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: rally
   cardName: Rally
+  cardDescription: Increase attack speed of one ally line.
+  cardArea: Ally line
+  cardKind: Buff
+  rulesText: Increase attack speed for all units in selected ally line.
   cardType: 1
-  artwork: {fileID: 7461125245114056271, guid: 0d0b4ef342c34bb7867c5b47f39ae740, type: 3}
-  mpCost: 2
+  artwork: {fileID: 370204471567345681, guid: 0d0b4ef342c34bb7867c5b47f39ae740, type: 3}
+  mpCost: 3
+  temporary: 0
   unitData:
     attack: 0
     hp: 0
@@ -28,11 +33,16 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1
     projectileSpeed: 650
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects:
-  - effectType: 9
-    value: 0.3
-    value2: 3.5
+  - effectType: 21
+    value: 0.35
+    value2: 4
+    value3: 0
   idleSprite: {fileID: 0}
   attackFrames: []
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

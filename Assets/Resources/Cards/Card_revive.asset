@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: revive
   cardName: Revive
+  cardDescription: Revive limited fallen units once.
+  cardArea: All ally lines
+  cardKind: Recovery
+  rulesText: Revive a limited number of fallen units during battle.
   cardType: 1
   artwork: {fileID: -8125774475627718875, guid: c8255920a90e31f4d8d5b238c4e31d68, type: 3}
-  mpCost: 3
+  mpCost: 5
+  temporary: 0
   unitData:
     attack: 0
     hp: 0
@@ -28,11 +33,16 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1
     projectileSpeed: 650
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects:
   - effectType: 10
-    value: 3
+    value: 2
     value2: 0.5
+    value3: 0
   idleSprite: {fileID: 0}
   attackFrames: []
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

@@ -21,7 +21,6 @@ namespace DraftCards.EditorTools
         private const string UnitPrefabPath = PrefabFolder + "/UnitGroupViewPrefab.prefab";
         private const string BattlefieldBackgroundPath = "Assets/Art/Backgrounds/background.png";
         private const string MpPoolSpritePath = "Assets/Art/UI/MPPool_Orb.png";
-        private const string DeckPileSpritePath = "Assets/Art/UI/DeckPile_Icon.png";
         private const string FightButtonSpritePath = "Assets/Art/UI/FightButton_Frame.png";
         private const string UnitShadowSpritePath = "Assets/Art/Effects/UnitShadow.png";
 
@@ -30,6 +29,7 @@ namespace DraftCards.EditorTools
         private static readonly Color EnemyLineColor = new(0.36f, 0.18f, 0.20f, 0.65f);
         private static readonly Color PanelColor = new(0.16f, 0.17f, 0.20f, 0.90f);
         private static readonly Color ButtonColor = new(0.30f, 0.55f, 0.85f);
+        private static readonly Vector2 CardViewSize = new(176f, 240f);
 
         [MenuItem("DraftCards/Build Battle Prototype Scene")]
         public static void Build()
@@ -74,7 +74,6 @@ namespace DraftCards.EditorTools
 
             TMP_Text mpText = BuildMpText(canvas.transform);
             Button confirmButton = BuildConfirmButton(canvas.transform);
-            TMP_Text deckCountText = BuildDeckPileIcon(canvas.transform);
 
             Transform handContainer = BuildHandContainer(canvas.transform);
 
@@ -83,6 +82,7 @@ namespace DraftCards.EditorTools
             HandManager handManager = managers.AddComponent<HandManager>();
             MPManager mpManager = managers.AddComponent<MPManager>();
             BattlefieldManager battlefieldManager = managers.AddComponent<BattlefieldManager>();
+            UpgradeManager upgradeManager = managers.AddComponent<UpgradeManager>();
             CardPlayManager cardPlayManager = managers.AddComponent<CardPlayManager>();
             GameManager gameManager = managers.AddComponent<GameManager>();
             UIManager uiManager = managers.AddComponent<UIManager>();
@@ -95,7 +95,9 @@ namespace DraftCards.EditorTools
                 ("_mpManager", mpManager),
                 ("_handManager", handManager),
                 ("_deckManager", deckManager),
-                ("_battlefieldView", battlefieldView));
+                ("_battlefieldView", battlefieldView),
+                ("_battlefieldManager", battlefieldManager),
+                ("_upgradeManager", upgradeManager));
             WireSerialized(gameManager,
                 ("_deckManager", deckManager),
                 ("_handManager", handManager),
@@ -113,7 +115,6 @@ namespace DraftCards.EditorTools
                 ("_handContainer", handContainer),
                 ("_cardViewPrefab", cardViewComponent),
                 ("_mpText", mpText),
-                ("_deckCountText", deckCountText),
                 ("_endButton", confirmButton));
             WireSerialized(battlefieldView,
                 ("_cardPlayManager", cardPlayManager),
@@ -241,7 +242,7 @@ namespace DraftCards.EditorTools
 
             // TODO: remove later — debug label so the Front/Middle/Back lanes are visible during development.
             string label = $"{(isPlayerSide ? "P" : "E")} {line}";
-            TMP_Text title = BuildText(go.transform, "Title", label, 28, TextAlignmentOptions.Center);
+            TMP_Text title = BuildText(go.transform, "Title", label, 28, TextAlignmentOptions.Center, GameFontRole.Title);
             title.rectTransform.sizeDelta = new Vector2(0, 40);
             title.color = new Color(1f, 1f, 1f, 0.6f);
             title.fontStyle = TMPro.FontStyles.Bold;
@@ -276,7 +277,7 @@ namespace DraftCards.EditorTools
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            TMP_Text vs = BuildText(go.transform, "VS", "VS", 80, TextAlignmentOptions.Center);
+            TMP_Text vs = BuildText(go.transform, "VS", "VS", 80, TextAlignmentOptions.Center, GameFontRole.Title);
             Stretch(vs.gameObject);
         }
 
@@ -315,7 +316,7 @@ namespace DraftCards.EditorTools
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
-            TMP_Text header = BuildText(panel.transform, "Header", "PREVIEW", 28, TextAlignmentOptions.Center);
+            TMP_Text header = BuildText(panel.transform, "Header", "PREVIEW", 28, TextAlignmentOptions.Center, GameFontRole.Title);
             TMP_Text atkText = BuildText(panel.transform, "AttackText", "ATK -", 24, TextAlignmentOptions.MidlineLeft);
             TMP_Text hpText = BuildText(panel.transform, "HpText", "HP -", 24, TextAlignmentOptions.MidlineLeft);
             TMP_Text countText = BuildText(panel.transform, "CountText", "x-", 24, TextAlignmentOptions.MidlineLeft);
@@ -376,36 +377,10 @@ namespace DraftCards.EditorTools
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            TMP_Text label = BuildText(go.transform, "Label", "FIGHT", 38, TextAlignmentOptions.Center);
+            TMP_Text label = BuildText(go.transform, "Label", "FIGHT", 38, TextAlignmentOptions.Center, GameFontRole.Title);
             label.color = new Color(0.10f, 0.10f, 0.10f);
             Stretch(label.gameObject);
             return button;
-        }
-
-        private static TMP_Text BuildDeckPileIcon(Transform parent)
-        {
-            GameObject go = NewUIObject("DeckPileIcon", parent);
-            Image image = go.AddComponent<Image>();
-            image.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(DeckPileSpritePath);
-            image.color = image.sprite == null ? Color.white : Color.white;
-            image.preserveAspect = true;
-            image.raycastTarget = false;
-
-            RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.13f, 0.045f);
-            rect.anchorMax = new Vector2(0.19f, 0.165f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-
-            TMP_Text count = BuildText(go.transform, "DeckCount", "0", 36, TextAlignmentOptions.Center);
-            RectTransform countRect = count.rectTransform;
-            countRect.anchorMin = new Vector2(0.25f, 0.32f);
-            countRect.anchorMax = new Vector2(0.85f, 0.92f);
-            countRect.offsetMin = Vector2.zero;
-            countRect.offsetMax = Vector2.zero;
-            count.color = Color.white;
-            count.fontStyle = FontStyles.Bold;
-            return count;
         }
 
         // --- CardView prefab -----------------------------------------------
@@ -414,12 +389,12 @@ namespace DraftCards.EditorTools
         {
             GameObject card = new("CardViewPrefab", typeof(RectTransform));
             RectTransform rect = card.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(160, 240);
+            rect.sizeDelta = CardViewSize;
 
             // Artwork fills the entire card. Acts as the Button target.
             Image artImage = card.AddComponent<Image>();
             artImage.color = Color.white;
-            artImage.preserveAspect = true;
+            artImage.preserveAspect = false;
             artImage.raycastTarget = true;
 
             Button button = card.AddComponent<Button>();
@@ -441,6 +416,8 @@ namespace DraftCards.EditorTools
             WireSerialized(view,
                 ("_artwork", artImage),
                 ("_selectedBorder", selectedBorder),
+                ("_fixedCardSize", CardViewSize),
+                ("_scaleArtworkToFixedSize", true),
                 ("_selectPulseScale", 1.15f),
                 ("_selectPulseDuration", 0.18f),
                 ("_selectFlyDuration", 0.32f),
@@ -523,7 +500,13 @@ namespace DraftCards.EditorTools
             rect.offsetMax = Vector2.zero;
         }
 
-        private static TMP_Text BuildText(Transform parent, string name, string text, float size, TextAlignmentOptions align)
+        private static TMP_Text BuildText(
+            Transform parent,
+            string name,
+            string text,
+            float size,
+            TextAlignmentOptions align,
+            GameFontRole fontRole = GameFontRole.Normal)
         {
             GameObject go = NewUIObject(name, parent);
             TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
@@ -531,6 +514,7 @@ namespace DraftCards.EditorTools
             tmp.fontSize = size;
             tmp.alignment = align;
             tmp.color = Color.white;
+            GameFonts.Apply(tmp, fontRole);
             return tmp;
         }
 
@@ -579,6 +563,9 @@ namespace DraftCards.EditorTools
                     break;
                 case float f:
                     prop.floatValue = f;
+                    break;
+                case Vector2 v2:
+                    prop.vector2Value = v2;
                     break;
                 case System.Enum e:
                     prop.intValue = System.Convert.ToInt32(e);

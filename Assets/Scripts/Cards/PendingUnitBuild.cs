@@ -17,11 +17,17 @@ namespace DraftCards.Cards
         public Sprite projectileSprite;
         public string displayName;
 
+        // Identifies which upgrade family this unit belongs to (the base unit card's
+        // cardId). The Upgrade spell uses it to match on-field units to a family and to
+        // re-skin/scale them when the family evolves. Empty for clones/enemies.
+        public string familyId;
+
         public float moveSpeed;
         public float attackRange;
         public float attackCooldown;
         public float attackSpeed;
         public float projectileSpeed;
+        public float projectileAoeRadius;
         public UnitType unitType;
         public float shadowScale = 1f;
 
@@ -34,6 +40,8 @@ namespace DraftCards.Cards
         // seconds. 0 duration means no rally.
         public float rallyBonus;
         public float rallyDuration;
+        public float damageReduction;
+        public bool temporaryBattleOnly;
 
         public List<CardData> appliedCards = new();
 
@@ -50,11 +58,13 @@ namespace DraftCards.Cards
             attackFrames = unitCard.attackFrames;
             projectileSprite = unitCard.projectileSprite;
             displayName = unitCard.cardName;
+            familyId = !string.IsNullOrEmpty(unitCard.familyRootId) ? unitCard.familyRootId : unitCard.cardId;
             moveSpeed = unitCard.unitData.moveSpeed;
             attackRange = unitCard.unitData.attackRange;
             attackCooldown = unitCard.unitData.attackCooldown;
             attackSpeed = unitCard.unitData.attackSpeed;
             projectileSpeed = unitCard.unitData.projectileSpeed;
+            projectileAoeRadius = unitCard.unitData.projectileAoeRadius;
             unitType = unitCard.unitData.unitType;
             shadowScale = unitCard.unitData.shadowScale > 0f ? unitCard.unitData.shadowScale : 1f;
             appliedCards.Add(unitCard);

@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: goblin_archer
   cardName: Goblin Archer
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: -1517916593314758316, guid: e0ae91581acd2dc4888a080ca75565e7, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 65
     hp: 700
@@ -28,10 +33,14 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1.8
     projectileSpeed: 480
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: -1517916593314758316, guid: e0ae91581acd2dc4888a080ca75565e7, type: 3}
   attackFrames:
   - {fileID: -1517916593314758316, guid: e0ae91581acd2dc4888a080ca75565e7, type: 3}
   - {fileID: -1530539035459580275, guid: 227aac9114eacf543bc7a0c3e54bbc90, type: 3}
-  projectileSprite: {fileID: 0}
+  projectileSprite: {fileID: 7246912378945123381, guid: 8d465c1d72fc4d22a81bcbe5a18e9804, type: 3}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

@@ -129,7 +129,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 160, y: 240}
+  m_SizeDelta: {x: 176, y: 240}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8071376744934161260
 CanvasRenderer:
@@ -161,7 +161,7 @@ MonoBehaviour:
       m_Calls: []
   m_Sprite: {fileID: 0}
   m_Type: 0
-  m_PreserveAspect: 1
+  m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -235,6 +235,8 @@ MonoBehaviour:
   _unitColor: {r: 0.3, g: 0.45, b: 0.85, a: 1}
   _supportColor: {r: 0.45, g: 0.75, b: 0.4, a: 1}
   _disabledColor: {r: 0.75, g: 0.75, b: 0.75, a: 1}
+  _fixedCardSize: {x: 176, y: 240}
+  _scaleArtworkToFixedSize: 1
   _hoverScale: 1.3
   _hoverLift: 80
   _selectPulseScale: 1.15

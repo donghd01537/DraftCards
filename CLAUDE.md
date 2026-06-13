@@ -12,6 +12,7 @@ DraftCards — a Unity card-battler. The player drafts cards each round, summons
 
 | Working on… | Read |
 |---|---|
+| Overall game direction, stage flow, planning loop | [Docs/GameOverview.md](Docs/GameOverview.md) |
 | Card stats, spells, draft/battle/reset rules | [Docs/Cards.md](Docs/Cards.md) |
 | **Adding a new Spell card** | [Docs/Cards.md → Adding a new spell card](Docs/Cards.md#adding-a-new-spell-card) — read this **before** writing any code; it lists every file to touch and the build-mutating-vs-battlefield-spell distinction that drives the whole design. |
 | Adding/editing a Unit (art → data → asset) | [Docs/Units.md](Docs/Units.md) |
@@ -44,5 +45,5 @@ Assets/
   Art/       Characters/ · Cards/ · Enemies/ · Effects/
   Resources/ Cards/ (player) · Enemies/ (waves)
   Scenes/    BattlePrototype.unity (main), SampleScene.unity
-Docs/        Cards.md · Units.md · BattleField.md
+Docs/        GameOverview.md · Cards.md · Units.md · BattleField.md
 ```

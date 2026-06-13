@@ -3,7 +3,7 @@ guid: 0d0b4ef342c34bb7867c5b47f39ae740
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7461125245114056271
+      213: 370204471567345681
     second: Rally_0
   externalObjects: {}
   serializedVersion: 13
@@ -118,39 +118,39 @@ TextureImporter:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 235
-        height: 321
+        width: 343
+        height: 540
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
-      customData:
+      customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 7ceef78294844983b49e6d42a0dd858f
-      internalID: 7461125245114056271
+      spriteID: 1186806610b332500800000000000000
+      internalID: 370204471567345681
       vertices: []
-      indices:
+      indices: 
       edges: []
       weights: []
     outline: []
-    customData:
+    customData: 
     physicsShape: []
     bones: []
-    spriteID:
+    spriteID: 
     internalID: 0
     vertices: []
-    indices:
+    indices: 
     edges: []
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Rally_0: 7461125245114056271
-  mipmapLimitGroupName:
+      Rally_0: 370204471567345681
+  mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData:
-  assetBundleName:
-  assetBundleVariant:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

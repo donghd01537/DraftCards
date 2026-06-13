@@ -39,11 +39,9 @@ namespace DraftCards.Battle
         [SerializeField] private float _projectileOriginHeight = 0.31f;
         // Fallback origin height (local units) when the view's sprite height is unknown.
         [SerializeField] private float _projectileFallbackHeight = 50f;
-        // Projectile render size, as a multiple of the unit art scale. >1 makes the
-        // thrown rock bigger than the held one for a heavier, more readable boulder.
+        // Projectile render size, as a multiple of the unit art scale. >1 keeps small
+        // sprites like arrows readable and makes boulders feel heavier.
         [SerializeField] private float _projectileSizeMultiplier = 1.5f;
-        // Blast radius (in battlefield units) for the projectile's area damage on impact.
-        [SerializeField] private float _projectileAoeRadius = 140f;
         // Length of the throw animation (windup -> release). Fixed so the throw reads as a
         // deliberate motion instead of a frame-flicker, regardless of how fast the unit
         // attacks. Clamped below the attack cooldown so it always finishes before the next.
@@ -66,6 +64,7 @@ namespace DraftCards.Battle
         public float BodyRadius => _bodyRadius;
         public bool IsPlayerUnit => Group != null && Group.IsPlayerUnit;
         public bool IsDead => Group == null || Group.IsDead;
+        public Vector2 CurrentVelocity { get; private set; }
 
         private IBattleSpatial _spatial;
         private float _cooldownTimer;
@@ -101,7 +100,19 @@ namespace DraftCards.Battle
                 {
                     Group.ActivateRally();
                 }
+                if (Group != null && Group.HasSlow)
+                {
+                    Group.ActivateSlow();
+                    View?.SetSlowTint(true);
+                }
             }
+        }
+
+        public void ClearBattlefieldSpellEffects()
+        {
+            Group?.ClearBattlefieldSpellEffects();
+            View?.SetShield(false);
+            View?.SetSlowTint(false);
         }
 
         public void SetSpatial(IBattleSpatial spatial)
@@ -174,10 +185,12 @@ namespace DraftCards.Battle
         {
             if (IsDead) return;
             Group.TakeDamage(damage);
+            // Hit feedback is the flash only. Rebuilding the sprites here would destroy the
+            // frame animators mid-swing, so a unit under steady fire would never get to show
+            // its own attack animation — it would look idle while still dealing damage.
             UnitGroupView view = View;
             if (view != null)
             {
-                view.RefreshFromUnit(Group);
                 view.PlayHitFlash();
             }
             if (Group.IsDead && _spatial != null)
@@ -212,11 +225,13 @@ namespace DraftCards.Battle
         {
             if (_dropping)
             {
+                CurrentVelocity = Vector2.zero;
                 View?.SetMoving(false);
                 return;
             }
             if (IsDead || _spatial == null || Group == null)
             {
+                CurrentVelocity = Vector2.zero;
                 View?.SetMoving(false);
                 return;
             }
@@ -238,6 +253,11 @@ namespace DraftCards.Battle
             if (_active && Group.IsRallied)
             {
                 Group.TickRally(Time.deltaTime);
+            }
+
+            if (_active && Group.IsSlowed && !Group.TickSlow(Time.deltaTime))
+            {
+                View?.SetSlowTint(false);
             }
 
             // Figure out where we want to go *before* separation, so separation can soften
@@ -300,9 +320,14 @@ namespace DraftCards.Battle
 
             bool moving = _active && velocity.sqrMagnitude > 0.001f && IsMovingTowardTarget();
             UpdateMoveVisualState(moving);
-            if (velocity.sqrMagnitude <= 0.001f) return;
+            if (velocity.sqrMagnitude <= 0.001f)
+            {
+                CurrentVelocity = Vector2.zero;
+                return;
+            }
 
             Vector2 next = myPos + velocity * Time.deltaTime;
+            CurrentVelocity = velocity;
             Rect.anchoredPosition = _spatial.ClampToBounds(next);
         }
 
@@ -425,9 +450,52 @@ namespace DraftCards.Battle
             float projectileSpeed = Group.ProjectileSpeed > 0f ? Group.ProjectileSpeed : _projectileSpeed;
 
             Vector2 start = Rect.anchoredPosition + new Vector2(0f, originLocal * viewScale);
-            Projectile.Launch(fieldRoot, start, target, target.Rect.anchoredPosition,
+            float aoeRadius = Group.ProjectileAoeRadius;
+            bool lobbed = aoeRadius > 0f;
+            Vector2 impact = lobbed
+                ? target.Rect.anchoredPosition
+                : PredictIntercept(start, target.Rect.anchoredPosition, target.CurrentVelocity, projectileSpeed);
+            Projectile.Launch(fieldRoot, start, target, impact,
                 damage, Group.ProjectileSprite, projectileSpeed, projectileScale,
-                _spatial, IsPlayerUnit, _projectileAoeRadius);
+                _spatial, IsPlayerUnit, aoeRadius, lobbed);
+        }
+
+        private static Vector2 PredictIntercept(Vector2 start, Vector2 targetPosition, Vector2 targetVelocity, float projectileSpeed)
+        {
+            float speed = Mathf.Max(1f, projectileSpeed);
+            Vector2 toTarget = targetPosition - start;
+
+            float a = Vector2.Dot(targetVelocity, targetVelocity) - speed * speed;
+            float b = 2f * Vector2.Dot(toTarget, targetVelocity);
+            float c = Vector2.Dot(toTarget, toTarget);
+
+            float t = 0f;
+            if (Mathf.Abs(a) < 0.001f)
+            {
+                if (Mathf.Abs(b) > 0.001f) t = -c / b;
+            }
+            else
+            {
+                float discriminant = b * b - 4f * a * c;
+                if (discriminant >= 0f)
+                {
+                    float sqrt = Mathf.Sqrt(discriminant);
+                    float t1 = (-b - sqrt) / (2f * a);
+                    float t2 = (-b + sqrt) / (2f * a);
+                    t = SmallestPositive(t1, t2);
+                }
+            }
+
+            return t > 0f ? targetPosition + targetVelocity * t : targetPosition;
+        }
+
+        private static float SmallestPositive(float a, float b)
+        {
+            bool aValid = a > 0f;
+            bool bValid = b > 0f;
+            if (aValid && bValid) return Mathf.Min(a, b);
+            if (aValid) return a;
+            return bValid ? b : 0f;
         }
     }
 

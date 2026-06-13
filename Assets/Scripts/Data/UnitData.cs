@@ -21,6 +21,9 @@ namespace DraftCards.Data
         // by ranged units (those that throw a projectile). 0 = use the launcher default.
         public float projectileSpeed = 650f;
 
+        // Optional area radius for lobbed projectiles. 0 means a direct single-target hit.
+        public float projectileAoeRadius = 0f;
+
         // Multiplier on the ground shadow size (1 = default). Larger for big units.
         public float shadowScale = 1f;
     }

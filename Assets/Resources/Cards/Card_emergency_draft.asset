@@ -10,13 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
-  m_Name: Card_strengthen
+  m_Name: Card_emergency_draft
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
-  cardId: strengthen
-  cardName: Strengthen
+  cardId: emergency_draft
+  cardName: Emergency Draft
+  cardDescription: Summon a temporary unit for this wave.
+  cardArea: Unit reinforcement
+  cardKind: Temporary units
+  rulesText: Roll 2 random units and pick 1. It joins the battle this wave only and
+    is removed when the wave ends. Does not use your unit pick.
   cardType: 1
-  artwork: {fileID: 6460315190499871909, guid: 42a016e565c5f364fa8a5a6481126f05, type: 3}
-  mpCost: 3
+  artwork: {fileID: 345049588289900376, guid: dab83f0e346148e47aec8f8d6d813ce7, type: 3}
+  mpCost: 6
+  temporary: 0
   unitData:
     attack: 0
     hp: 0
@@ -28,11 +34,16 @@ MonoBehaviour:
     attackCooldown: 1
     attackSpeed: 1
     projectileSpeed: 650
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects:
-  - effectType: 7
-    value: 0.35
+  - effectType: 23
+    value: 2
     value2: 0
+    value3: 0
   idleSprite: {fileID: 0}
   attackFrames: []
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

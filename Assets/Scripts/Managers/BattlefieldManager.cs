@@ -44,6 +44,13 @@ namespace DraftCards.Managers
             }
         }
 
+        public void RemoveSilent(UnitGroup unit)
+        {
+            if (unit == null) return;
+            List<UnitGroup> list = unit.IsPlayerUnit ? _playerUnits : _enemyUnits;
+            list.Remove(unit);
+        }
+
         public void ClearEnemies()
         {
             _enemyUnits.Clear();

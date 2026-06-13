@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: archer_2
   cardName: Archer x2
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: 217175437162310223, guid: 99ffd1fd880515842a24b7034c3d53aa, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 85
     hp: 1000
@@ -28,10 +33,14 @@ MonoBehaviour:
     attackCooldown: 0.9
     attackSpeed: 2
     projectileSpeed: 500
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: -7748634542612094077, guid: cfaf452b41cbb1447aa334435fb0059f, type: 3}
   attackFrames:
   - {fileID: 2101743382021104409, guid: e56333d73176e9b469ad6a5011acffcd, type: 3}
   - {fileID: -7527318916769561817, guid: 9f4b1fee9e90a80448c714ced094d060, type: 3}
-  projectileSprite: {fileID: 0}
+  projectileSprite: {fileID: 7246912378945123381, guid: 8d465c1d72fc4d22a81bcbe5a18e9804, type: 3}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

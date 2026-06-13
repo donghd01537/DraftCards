@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using DraftCards.Cards;
 using DraftCards.Core;
 using DraftCards.Data;
@@ -18,7 +19,8 @@ namespace DraftCards.Managers
         [SerializeField] private BattlefieldManager _battlefieldManager;
         [SerializeField] private BattlefieldView _battlefieldView;
 
-        [SerializeField] private int _cardsPerDraw = 5;
+        [SerializeField] private int _unitCardsPerWave = 3;
+        [SerializeField] private int _spellCardsPerWave = 5;
 
         [Header("Battle pacing")]
         [SerializeField] private float _postBattlePause = 0.5f;
@@ -135,6 +137,7 @@ namespace DraftCards.Managers
             // side and rebuild it from the next wave's composition.
             if (_battlefieldView != null)
             {
+                _battlefieldView.ClearTemporaryPlayerUnits();
                 _battlefieldView.ClearEnemyUnits();
             }
             _battlefieldManager.ClearEnemies();
@@ -155,6 +158,9 @@ namespace DraftCards.Managers
         private void BeginPlayerTurn()
         {
             ChangeState(GameState.DrawPhase);
+            List<CardData> heldCards = _cardPlayManager != null
+                ? _cardPlayManager.ExtractHeldSpellCards(_handManager.Cards)
+                : new List<CardData>();
             _mpManager.ResetForNewTurn();
             _cardPlayManager.BeginNewTurn();
             // Clear one-turn battlefield effects (e.g. an unspent Revive budget) so a spell
@@ -164,11 +170,14 @@ namespace DraftCards.Managers
             // Discard any leftover hand cards so each round starts with a fresh draw.
             foreach (Data.CardData card in _handManager.Cards)
             {
+                if (heldCards.Contains(card)) continue;
                 _deckManager.Discard(card);
             }
             _handManager.Clear();
 
-            _handManager.AddCards(_deckManager.Draw(_cardsPerDraw));
+            _handManager.AddCards(_deckManager.Draw(CardType.Unit, _unitCardsPerWave));
+            _handManager.AddCards(_deckManager.Draw(CardType.Support, _spellCardsPerWave));
+            _handManager.AddCards(heldCards);
             ChangeState(GameState.SelectCardPhase);
         }
 

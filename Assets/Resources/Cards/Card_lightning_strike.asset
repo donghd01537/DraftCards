@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
+  m_Name: Card_lightning_strike
+  m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
+  cardId: lightning_strike
+  cardName: Lightning Strike
+  cardDescription: Strike 1-2 high-threat enemies.
+  cardArea: Priority enemy area
+  cardKind: Damage
+  rulesText: Hit 1-2 high-threat enemies, prioritizing ranged, support, or elite
+    enemies.
+  cardType: 1
+  artwork: {fileID: 3402156135608667222, guid: 51a3e63b521a43d8a7fac93c1f463197, type: 3}
+  mpCost: 4
+  temporary: 0
+  unitData:
+    attack: 0
+    hp: 0
+    count: 0
+    spawnLine: 0
+    unitType: 0
+    moveSpeed: 120
+    attackRange: 40
+    attackCooldown: 1
+    attackSpeed: 1
+    projectileSpeed: 650
+    projectileAoeRadius: 0
+    shadowScale: 1
+  supportEffects:
+  - effectType: 22
+    value: 750
+    value2: 2
+    value3: 0
+  idleSprite: {fileID: 0}
+  attackFrames: []
+  projectileSprite: {fileID: 6123456789012345679, guid: bb79f69ba1a744199003c499dea46a6c, type: 3}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

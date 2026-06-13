@@ -40,6 +40,10 @@ namespace DraftCards.EditorTools
             {
                 AssetDatabase.ImportAsset(EnemyArtFolder, ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
             }
+            if (AssetDatabase.IsValidFolder(ProjectileArtFolder))
+            {
+                AssetDatabase.ImportAsset(ProjectileArtFolder, ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
+            }
             AssetDatabase.Refresh();
 
             // Wipe stale cards so deleted variants don't keep showing up in the deck
@@ -61,7 +65,9 @@ namespace DraftCards.EditorTools
                     CreateUnitCard(u.id, u.name, u.characterFolder, u.spriteFile,
                         attack: u.attack, hp: u.hp, count: u.count, line: ParseLine(u.line, u.id),
                         moveSpeed: u.moveSpeed, attackRange: u.attackRange, attackCooldown: u.attackCooldown, attackSpeed: u.attackSpeed,
-                        unitType: ParseUnitType(u.unitType, u.id), projectileFile: u.projectileSprite, projectileSpeed: u.projectileSpeed, shadowScale: u.shadowScale);
+                        unitType: ParseUnitType(u.unitType, u.id), projectileFile: u.projectileSprite, projectileSpeed: u.projectileSpeed,
+                        projectileAoeRadius: u.projectileAoeRadius, shadowScale: u.shadowScale,
+                        familyRootId: u.familyRootId, excludeFromInitialDeck: u.excludeFromInitialDeck, evolution: u.evolution);
                 }
             }
 
@@ -69,7 +75,9 @@ namespace DraftCards.EditorTools
             {
                 foreach (SupportCardConfig s in config.supports)
                 {
-                    CreateSupportCard(s.id, s.name, s.mpCost, ParseEffectType(s.effectType, s.id), s.value, s.value2, s.spriteFile);
+                    CreateSupportCard(s.id, s.name, s.mpCost, ParseEffectType(s.effectType, s.id),
+                        s.value, s.value2, s.value3, s.spriteFile, s.projectileSprite,
+                        s.area, s.spellType, s.shortDescription, s.description, s.excludeFromInitialDeck);
                 }
             }
 
@@ -82,7 +90,8 @@ namespace DraftCards.EditorTools
                     CreateEnemyCard(e.id, e.name, e.enemyFolder,
                         attack: e.attack, hp: e.hp, line: ParseLine(e.line, e.id),
                         moveSpeed: e.moveSpeed, attackRange: e.attackRange, attackCooldown: e.attackCooldown, attackSpeed: e.attackSpeed,
-                        unitType: ParseUnitType(e.unitType, e.id), projectileFile: e.projectileSprite, projectileSpeed: e.projectileSpeed, shadowScale: e.shadowScale);
+                        unitType: ParseUnitType(e.unitType, e.id), projectileFile: e.projectileSprite, projectileSpeed: e.projectileSpeed,
+                        projectileAoeRadius: e.projectileAoeRadius, shadowScale: e.shadowScale);
                 }
             }
 
@@ -149,7 +158,8 @@ namespace DraftCards.EditorTools
         private static void CreateUnitCard(string id, string name, string characterFolder, string spriteFile,
             int attack, int hp, int count, FormationLine line,
             float moveSpeed, float attackRange, float attackCooldown, float attackSpeed,
-            UnitType unitType, string projectileFile, float projectileSpeed, float shadowScale)
+            UnitType unitType, string projectileFile, float projectileSpeed, float projectileAoeRadius, float shadowScale,
+            string familyRootId = null, bool excludeFromInitialDeck = false, EvolutionConfig[] evolution = null)
         {
             CardData card = ScriptableObject.CreateInstance<CardData>();
             card.cardId = id;
@@ -167,6 +177,7 @@ namespace DraftCards.EditorTools
                 attackCooldown = attackCooldown,
                 attackSpeed = attackSpeed,
                 projectileSpeed = projectileSpeed,
+                projectileAoeRadius = Mathf.Max(0f, projectileAoeRadius),
                 unitType = unitType,
                 shadowScale = shadowScale > 0f ? shadowScale : 1f
             };
@@ -176,13 +187,29 @@ namespace DraftCards.EditorTools
             card.attackFrames = LoadFramesFromFolder($"{CharacterArtFolder}/{characterFolder}/Attack");
             card.projectileSprite = LoadProjectileSprite(projectileFile);
 
+            // Unit Upgrade / Evolution data.
+            card.familyRootId = familyRootId;
+            card.excludeFromInitialDeck = excludeFromInitialDeck;
+            card.evolutionLevels = new List<EvolutionLevel>();
+            if (evolution != null)
+            {
+                foreach (EvolutionConfig e in evolution)
+                {
+                    card.evolutionLevels.Add(new EvolutionLevel
+                    {
+                        statMultiplier = e.statMultiplier > 0f ? e.statMultiplier : 1f,
+                        evolveToId = e.evolveToId
+                    });
+                }
+            }
+
             SaveCardAsset(card, id, CardOutputFolder);
         }
 
         private static void CreateEnemyCard(string id, string name, string enemyFolder,
             int attack, int hp, FormationLine line,
             float moveSpeed, float attackRange, float attackCooldown, float attackSpeed,
-            UnitType unitType, string projectileFile, float projectileSpeed, float shadowScale)
+            UnitType unitType, string projectileFile, float projectileSpeed, float projectileAoeRadius, float shadowScale)
         {
             CardData card = ScriptableObject.CreateInstance<CardData>();
             card.cardId = id;
@@ -200,6 +227,7 @@ namespace DraftCards.EditorTools
                 attackCooldown = attackCooldown,
                 attackSpeed = attackSpeed,
                 projectileSpeed = projectileSpeed,
+                projectileAoeRadius = Mathf.Max(0f, projectileAoeRadius),
                 unitType = unitType,
                 shadowScale = shadowScale > 0f ? shadowScale : 1f
             };
@@ -215,22 +243,30 @@ namespace DraftCards.EditorTools
             SaveCardAsset(card, id, EnemyOutputFolder);
         }
 
-        private static void CreateSupportCard(string id, string name, int cost, SupportEffectType effectType, float value, float value2, string spriteFile = null)
+        private static void CreateSupportCard(string id, string name, int cost, SupportEffectType effectType, float value, float value2, float value3,
+            string spriteFile = null, string projectileFile = null, string area = null, string spellType = null,
+            string shortDescription = null, string description = null, bool excludeFromInitialDeck = false)
         {
             CardData card = ScriptableObject.CreateInstance<CardData>();
             card.cardId = id;
             card.cardName = name;
+            card.cardDescription = shortDescription;
+            card.cardArea = area;
+            card.cardKind = spellType;
+            card.rulesText = description;
             card.cardType = CardType.Support;
             card.mpCost = cost;
+            card.excludeFromInitialDeck = excludeFromInitialDeck;
             card.unitData = null;
             card.supportEffects = new List<SupportEffectData>
             {
-                new() { effectType = effectType, value = value, value2 = value2 }
+                new() { effectType = effectType, value = value, value2 = value2, value3 = value3 }
             };
             if (!string.IsNullOrWhiteSpace(spriteFile))
             {
                 card.artwork = LoadCardSprite(spriteFile);
             }
+            card.projectileSprite = LoadProjectileSprite(projectileFile);
 
             SaveCardAsset(card, id, CardOutputFolder);
         }
@@ -388,7 +424,19 @@ namespace DraftCards.EditorTools
             public string unitType;
             public string projectileSprite;
             public float projectileSpeed;
+            public float projectileAoeRadius;
             public float shadowScale;
+            // Unit Upgrade / Evolution fields (optional).
+            public string familyRootId;
+            public bool excludeFromInitialDeck;
+            public EvolutionConfig[] evolution;
+        }
+
+        [System.Serializable]
+        private class EvolutionConfig
+        {
+            public float statMultiplier;
+            public string evolveToId;
         }
 
         [System.Serializable]
@@ -407,6 +455,7 @@ namespace DraftCards.EditorTools
             public string unitType;
             public string projectileSprite;
             public float projectileSpeed;
+            public float projectileAoeRadius;
             public float shadowScale;
         }
 
@@ -419,7 +468,14 @@ namespace DraftCards.EditorTools
             public string effectType;
             public float value;
             public float value2;
+            public float value3;
             public string spriteFile;
+            public string projectileSprite;
+            public string area;
+            public string spellType;
+            public string shortDescription;
+            public string description;
+            public bool excludeFromInitialDeck;
         }
     }
 }

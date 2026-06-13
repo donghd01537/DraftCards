@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
+  m_Name: Card_mana_crystal
+  m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
+  cardId: mana_crystal
+  cardName: Mana Crystal
+  cardDescription: Increase Max MP by 1 next wave.
+  cardArea: Player economy
+  cardKind: Scaling
+  rulesText: Increase Max MP by +1 starting next wave.
+  cardType: 1
+  artwork: {fileID: -6043657294105173317, guid: 7a70fc5cd1308a54cb117facd995f0bf, type: 3}
+  mpCost: 2
+  temporary: 0
+  unitData:
+    attack: 0
+    hp: 0
+    count: 0
+    spawnLine: 0
+    unitType: 0
+    moveSpeed: 120
+    attackRange: 40
+    attackCooldown: 1
+    attackSpeed: 1
+    projectileSpeed: 650
+    projectileAoeRadius: 0
+    shadowScale: 1
+  supportEffects:
+  - effectType: 17
+    value: 1
+    value2: 0
+    value3: 0
+  idleSprite: {fileID: 0}
+  attackFrames: []
+  projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

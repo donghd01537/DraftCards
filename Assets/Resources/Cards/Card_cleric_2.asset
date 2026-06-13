@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: cleric_2
   cardName: Cleric x2
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: -4502726935913310248, guid: 6bbf77cd990caf749b1dd14413608a66, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 65
     hp: 1600
@@ -28,6 +33,7 @@ MonoBehaviour:
     attackCooldown: 1.4
     attackSpeed: 1.8
     projectileSpeed: 0
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: 5669913642837412506, guid: c5f97ec03c27ea44b947235087e53e74, type: 3}
@@ -35,3 +41,6 @@ MonoBehaviour:
   - {fileID: -1406262767752642419, guid: c5e47c56b12607f4193ac1f5021fbfd2, type: 3}
   - {fileID: -896780559953893874, guid: 95db3252ebb480a4db4df4659c911dd4, type: 3}
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

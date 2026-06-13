@@ -14,9 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: wolf_rider
   cardName: Wolf Rider
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
   cardType: 0
   artwork: {fileID: -6432770223450884504, guid: c6f8742c8663a4d4ebb6694aa5384b0a, type: 3}
   mpCost: 0
+  temporary: 0
   unitData:
     attack: 95
     hp: 1700
@@ -28,6 +33,7 @@ MonoBehaviour:
     attackCooldown: 0.9
     attackSpeed: 2.2
     projectileSpeed: 0
+    projectileAoeRadius: 0
     shadowScale: 1
   supportEffects: []
   idleSprite: {fileID: -6432770223450884504, guid: c6f8742c8663a4d4ebb6694aa5384b0a, type: 3}
@@ -35,3 +41,6 @@ MonoBehaviour:
   - {fileID: -6432770223450884504, guid: c6f8742c8663a4d4ebb6694aa5384b0a, type: 3}
   - {fileID: 5370407007343702280, guid: 07e572e6ccd95dd458848af646edbad8, type: 3}
   projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 0
+  familyRootId: 

@@ -22,6 +22,7 @@ MonoBehaviour:
   artwork: {fileID: 5468678170589107118, guid: 31a43bd33daf8a24692c2b2ce3745c5f, type: 3}
   mpCost: 1
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 0
     hp: 0
@@ -35,6 +36,8 @@ MonoBehaviour:
     projectileSpeed: 650
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects:
   - effectType: 13
     value: 2

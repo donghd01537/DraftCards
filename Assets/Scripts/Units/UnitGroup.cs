@@ -33,6 +33,13 @@ namespace DraftCards.Units
         public UnitType UnitType { get; private set; }
         public float ShadowScale { get; private set; }
 
+        // Support healer (Cleric / Shaman): every HealEveryAttacks normal attacks, this unit
+        // heals all living allies on its side (itself included) for HealAmount HP. 0 for either
+        // disables it. Driven from BattleUnit.PerformAttack via IBattleSpatial.HealAllies.
+        public int HealEveryAttacks { get; private set; }
+        public int HealAmount { get; private set; }
+        public bool IsHealer => HealEveryAttacks > 0 && HealAmount > 0;
+
         // The active speed multiplier from a Rally buff (1 = no buff). Folded into the
         // move speed and attack rate while the rally window is open.
         private float RallyMultiplier => IsRallied ? 1f + _rallyBonus : 1f;
@@ -101,6 +108,8 @@ namespace DraftCards.Units
             ProjectileAoeRadius = Mathf.Max(0f, build.projectileAoeRadius);
             UnitType = build.unitType;
             ShadowScale = build.shadowScale > 0f ? build.shadowScale : 1f;
+            HealEveryAttacks = Mathf.Max(0, build.healEveryAttacks);
+            HealAmount = Mathf.Max(0, build.healAmount);
             CurrentHp = MaxHp;
             if (build.shieldDuration > 0f) ApplyShield(build.shieldDuration);
             if (build.rallyDuration > 0f) ApplyRally(build.rallyBonus, build.rallyDuration);
@@ -127,6 +136,19 @@ namespace DraftCards.Units
             AttackRange *= multiplier;
             AttackSpeed *= multiplier;
             if (ProjectileSpeed > 0f) ProjectileSpeed *= multiplier;
+        }
+
+        // Scales ONLY HP and Attack by `multiplier` (1.10 = +10%). Used by the Unit Upgrade
+        // spell's generic fallback for families without an evolution ladder. Current HP keeps
+        // its damage proportion against the new max (no silent heal).
+        public void ApplyHpAttackMultiplier(float multiplier)
+        {
+            if (multiplier <= 0f || Mathf.Approximately(multiplier, 1f)) return;
+
+            float hpFraction = MaxHp > 0 ? (float)CurrentHp / MaxHp : 1f;
+            Attack = Mathf.Max(0, Mathf.RoundToInt(Attack * multiplier));
+            MaxHp = Mathf.Max(1, Mathf.RoundToInt(MaxHp * multiplier));
+            CurrentHp = Mathf.Clamp(Mathf.RoundToInt(MaxHp * hpFraction), 1, MaxHp);
         }
 
         // Re-skins this group to an evolved form: swaps art, name, family, line, and the
@@ -158,6 +180,20 @@ namespace DraftCards.Units
             ProjectileAoeRadius = Mathf.Max(0f, evolved.projectileAoeRadius);
             UnitType = evolved.unitType;
             ShadowScale = evolved.shadowScale > 0f ? evolved.shadowScale : 1f;
+            HealEveryAttacks = Mathf.Max(0, evolved.healEveryAttacks);
+            HealAmount = Mathf.Max(0, evolved.healAmount);
+        }
+
+        // Restores up to `amount` HP without exceeding max. No effect on a dead unit (a
+        // healer can't resurrect — that's the Revive spell's job) or for a non-positive
+        // amount. Returns the HP actually restored so callers can show feedback only on a
+        // real heal (a unit already at full HP shows nothing).
+        public int Heal(int amount)
+        {
+            if (amount <= 0 || IsDead || CurrentHp >= MaxHp) return 0;
+            int before = CurrentHp;
+            CurrentHp = Mathf.Min(MaxHp, CurrentHp + amount);
+            return CurrentHp - before;
         }
 
         // Arms (or extends) the Fortify shield. The timer doesn't start ticking until the

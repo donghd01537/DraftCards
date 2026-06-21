@@ -22,6 +22,7 @@ MonoBehaviour:
   artwork: {fileID: -4502726935913310248, guid: 6bbf77cd990caf749b1dd14413608a66, type: 3}
   mpCost: 0
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 65
     hp: 1600
@@ -32,15 +33,17 @@ MonoBehaviour:
     attackRange: 260
     attackCooldown: 1.4
     attackSpeed: 1.8
-    projectileSpeed: 0
+    projectileSpeed: 650
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 3
+    healAmount: 140
   supportEffects: []
-  idleSprite: {fileID: 5669913642837412506, guid: c5f97ec03c27ea44b947235087e53e74, type: 3}
+  idleSprite: {fileID: 21300000, guid: 08157fb03b0656641abf9a35eff61c40, type: 3}
   attackFrames:
-  - {fileID: -1406262767752642419, guid: c5e47c56b12607f4193ac1f5021fbfd2, type: 3}
-  - {fileID: -896780559953893874, guid: 95db3252ebb480a4db4df4659c911dd4, type: 3}
-  projectileSprite: {fileID: 0}
+  - {fileID: 21300000, guid: 2f89351f9f742474b9344edca4f86feb, type: 3}
+  - {fileID: 21300000, guid: 7a0b96ec933d0ba4db5901896e81ad8f, type: 3}
+  projectileSprite: {fileID: 5076457462583331912, guid: 44f9277238104852a266f28e862dc3d1, type: 3}
   evolutionLevels: []
   excludeFromInitialDeck: 0
   familyRootId: 

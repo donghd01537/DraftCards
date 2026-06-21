@@ -17,6 +17,12 @@ namespace DraftCards.Data
         public Sprite artwork;
         public int mpCost;
         public bool temporary;
+        // A one-off MP discount applied on top of the card's effective cost (e.g. the first card
+        // from a Lucky Draw is cheaper). Kept separate from mpCost because some cards — notably
+        // Upgrade Unit — derive their real cost dynamically (UpgradeManager.CurrentMpCost) and
+        // ignore mpCost entirely, so mutating mpCost would silently drop the discount. See
+        // CardPlayManager.EffectiveMpCost.
+        public int mpDiscount;
 
         public UnitData unitData;
         public List<SupportEffectData> supportEffects;
@@ -30,7 +36,9 @@ namespace DraftCards.Data
 
         // Unit Upgrade / Evolution ladder for this unit card. Index 0 is the FIRST
         // upgrade (the base card is the un-upgraded state), so evolutionLevels[0] is the
-        // result of upgrading once. Empty for non-upgradeable units. See UpgradeManager.
+        // result of upgrading once. Empty/null is fine: a unit with no ladder (or one whose
+        // ladder is exhausted) still upgrades via UpgradeManager's generic +10% HP/Attack
+        // fallback. See UpgradeManager.
         public List<EvolutionLevel> evolutionLevels;
 
         // When true, this card never enters the auto-built starting deck (DeckManager)

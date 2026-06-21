@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 764393cd3db55ee49a8ec1b166ebd495, type: 3}
+  m_Name: Card_holy_knight_3
+  m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
+  cardId: holy_knight_3
+  cardName: Holy Knight x3
+  cardDescription: 
+  cardArea: 
+  cardKind: 
+  rulesText: 
+  cardType: 0
+  artwork: {fileID: -3259009382078105600, guid: 447467904ef731141a469023e2430e90, type: 3}
+  mpCost: 0
+  temporary: 0
+  mpDiscount: 0
+  unitData:
+    attack: 116
+    hp: 3200
+    count: 3
+    spawnLine: 2
+    unitType: 0
+    moveSpeed: 240
+    attackRange: 85
+    attackCooldown: 1.2
+    attackSpeed: 1.85
+    projectileSpeed: 0
+    projectileAoeRadius: 0
+    shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
+  supportEffects: []
+  idleSprite: {fileID: 2895864232924514522, guid: 3fecc0ee0341f83468e2b83dec75b5f3, type: 3}
+  attackFrames:
+  - {fileID: 1030254631088559738, guid: 8f2528d4831bcae45b8f6a680072ea15, type: 3}
+  - {fileID: -253396329792739202, guid: ce12f9619d76e3e4bb7995bb8c71d63c, type: 3}
+  projectileSprite: {fileID: 0}
+  evolutionLevels: []
+  excludeFromInitialDeck: 1
+  familyRootId: swordsman_3

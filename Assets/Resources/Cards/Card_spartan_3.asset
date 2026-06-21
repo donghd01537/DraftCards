@@ -22,6 +22,7 @@ MonoBehaviour:
   artwork: {fileID: 254393381239888756, guid: 8440a6eba42a1344a958d5517e327feb, type: 3}
   mpCost: 0
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 121
     hp: 2860
@@ -35,6 +36,8 @@ MonoBehaviour:
     projectileSpeed: 0
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects: []
   idleSprite: {fileID: -7741508761955984946, guid: 99a0164e61ea65c4fba624750131c211, type: 3}
   attackFrames:

@@ -19,9 +19,10 @@ MonoBehaviour:
   cardKind: 
   rulesText: 
   cardType: 0
-  artwork: {fileID: 4395619921328869465, guid: 1635d8562de23364bb6d75cff6f71711, type: 3}
+  artwork: {fileID: 21300000, guid: 8b95ac9acfca481478bb97d071e22cf0, type: 3}
   mpCost: 0
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 150
     hp: 2600
@@ -35,11 +36,13 @@ MonoBehaviour:
     projectileSpeed: 0
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects: []
-  idleSprite: {fileID: 4395619921328869465, guid: 1635d8562de23364bb6d75cff6f71711, type: 3}
+  idleSprite: {fileID: 21300000, guid: 8b95ac9acfca481478bb97d071e22cf0, type: 3}
   attackFrames:
-  - {fileID: 4395619921328869465, guid: 1635d8562de23364bb6d75cff6f71711, type: 3}
-  - {fileID: -2577993335802236608, guid: 356299d0d7faa0c45bfd9a4431757afa, type: 3}
+  - {fileID: 21300000, guid: 8b95ac9acfca481478bb97d071e22cf0, type: 3}
+  - {fileID: 21300000, guid: 8295439d6bc116b49878a7ebda3f6851, type: 3}
   projectileSprite: {fileID: 0}
   evolutionLevels: []
   excludeFromInitialDeck: 0

@@ -22,6 +22,7 @@ MonoBehaviour:
   artwork: {fileID: 217175437162310223, guid: 99ffd1fd880515842a24b7034c3d53aa, type: 3}
   mpCost: 0
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 85
     hp: 1000
@@ -35,11 +36,13 @@ MonoBehaviour:
     projectileSpeed: 500
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects: []
-  idleSprite: {fileID: -7748634542612094077, guid: cfaf452b41cbb1447aa334435fb0059f, type: 3}
+  idleSprite: {fileID: 21300000, guid: 5a4006e7d5e90c84aae674c737bc8887, type: 3}
   attackFrames:
-  - {fileID: 2101743382021104409, guid: e56333d73176e9b469ad6a5011acffcd, type: 3}
-  - {fileID: -7527318916769561817, guid: 9f4b1fee9e90a80448c714ced094d060, type: 3}
+  - {fileID: 21300000, guid: bee49a5164ec62e4d92f403db6c5863d, type: 3}
+  - {fileID: 21300000, guid: bab00937f783aa049a86628af8baef24, type: 3}
   projectileSprite: {fileID: 7246912378945123381, guid: 8d465c1d72fc4d22a81bcbe5a18e9804, type: 3}
   evolutionLevels: []
   excludeFromInitialDeck: 0

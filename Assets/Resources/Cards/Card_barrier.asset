@@ -14,14 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.Data.CardData
   cardId: barrier
   cardName: Barrier
-  cardDescription: Give a medium shield to one ally line.
-  cardArea: Ally line
+  cardDescription: Give a medium shield to all allies.
+  cardArea: All allies
   cardKind: Defense
-  rulesText: Give medium shield to all units in selected ally line.
+  rulesText: Give medium shield to all ally units on the field.
   cardType: 1
   artwork: {fileID: -7910127128901405170, guid: b95e998b8dec71547908aa99570557c5, type: 3}
-  mpCost: 4
+  mpCost: 5
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 0
     hp: 0
@@ -35,6 +36,8 @@ MonoBehaviour:
     projectileSpeed: 650
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects:
   - effectType: 13
     value: 4

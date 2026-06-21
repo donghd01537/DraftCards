@@ -17,7 +17,7 @@ Cards are the player's main planning tools before automatic combat starts.
 
 | Rule | Design intent |
 |---|---|
-| **Fresh wave hand** | At the start of each wave, draw 3 Unit Cards and 5 Spell Cards. Unused cards are discarded after the wave, and the next wave draws a fresh hand. |
+| **Fresh wave hand** | At the start of each wave, draw 3 Unit Cards and 5 Spell Cards. Each draw is **independent and random** — cards are sampled fresh from the available pool every wave, not dealt from a finite deck. Leftover and previously-played cards do not shrink the pool, so a full hand is always available. |
 | **One Unit Card per wave** | Unit Cards are the long-term army-building choice. Limiting them makes each added group a commitment. |
 | **Unit Cards add groups** | A Unit Card adds a group of fighters, not one large stacked entity. Balance must account for group size. |
 | **Multiple Spell Cards per wave** | Spells are the flexible tactical layer. The player can combo them, answer a wave, or save MP. |
@@ -38,7 +38,7 @@ Each Unit Card has fixed attributes used to populate the spawned fighters. In ru
 | **HP** | Starting health per unit; reduced by incoming damage. |
 | **Speed** | Pixels per second movement on the battlefield. |
 | **Range** | Distance at which the unit engages its target (smaller = melee, larger = ranged). |
-| **Type** | `Ground` or `Flying`. Reserved for future targeting rules; currently informational. |
+| **Type** | `Ground`, `Flying`, or `Cavalry`. `Ground`/`Flying` are informational. `Cavalry` units flank along the field edge around the enemy front and dive for the **Back** line (then Middle, then Front as a last resort) — but if both sides field cavalry they duel each other first. See [BattleField.md → Cavalry skirmishers](BattleField.md#cavalry-skirmishers). |
 | **Line** | `Front`, `Middle`, or `Back` — the formation lane where new units spawn. |
 | **Count** | Number of independent fighters this card spawns. |
 | **Cooldown** | Base time in seconds between consecutive attacks. |
@@ -53,10 +53,12 @@ Design target stats also include **Defense** and **Target Priority**, but those 
 
 | Card | Count | Line | ATK | HP | Speed | Range | Cooldown | AttackSpeed | Effective Rate | Type | Style |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Swordsman x3 | 3 | Front | 110 | 2600 | 230 | 80 | 1.2s | 1.8 | 0.67s/atk | Ground | Slow melee tank — evolves to Spartan (uses the `Knight` art/character folder) |
+| Swordsman x3 | 3 | Front | 110 | 2600 | 230 | 80 | 1.2s | 1.8 | 0.67s/atk | Ground | Slow melee tank — 2nd upgrade branches to Spartan **or** Holy Knight (uses the `Knight` art/character folder) |
 | Archer x2 | 2 | Back | 85 | 1000 | 260 | 360 | 0.9s | 2.0 | 0.45s/atk | Ground | Fast ranged shooter (Arrow) |
-| Cleric x2 | 2 | Middle | 65 | 1600 | 245 | 260 | 1.4s | 1.8 | 0.78s/atk | Ground | Mid-range support frame |
-| Spartan x3 | 3 | Front | 121 | 2860 | 253 | 88 | 1.2s | 1.98 | 0.61s/atk | Ground | Swordsman's evolution (not drafted directly) — see [Unit Evolution](Units.md#unit-evolution) |
+| Cleric x2 | 2 | Middle | 65 | 1600 | 245 | 260 | 1.4s | 1.8 | 0.78s/atk | Ground | Mid-range support (HolyBolt) — **heals every ally (itself included) for 140 HP after every 3 normal attacks** |
+| Mage x3 | 3 | Back | 130 | 850 | 240 | 320 | 1.5s | 1.6 | 0.94s/atk | Ground | Back-line AoE caster — glass cannon, splash damage (`projectileAoeRadius` 90); no projectile art yet (Cleric-style) |
+| Spartan x3 | 3 | Front | 121 | 2860 | 253 | 88 | 1.2s | 1.98 | 0.61s/atk | Ground | Swordsman's offensive evolution (not drafted directly) — see [Unit Evolution](Units.md#unit-evolution) |
+| Holy Knight x3 | 3 | Front | 116 | 3200 | 240 | 85 | 1.2s | 1.85 | 0.65s/atk | Ground | Swordsman's defensive evolution — tankier, picked instead of Spartan at the 2nd upgrade (not drafted directly) |
 
 File naming: `Assets/Art/Cards/Units/{Name}_{Count}.png` (e.g. `Knight_3.png` = card spawning 3 Knights). The character sprite art (idle / attack frames) lives under `Assets/Art/Characters/{Name}/`.
 
@@ -69,9 +71,10 @@ Enemies use the same `UnitData` stats but always spawn with `count = 1`; per-rou
 | Goblin | Front | 45 | 900 | 280 | 70 | 0.8s | 1.8 | Fast swarm melee |
 | Goblin Archer | Back | 65 | 700 | 250 | 340 | 1.0s | 1.8 | Ranged (Arrow) |
 | Orc | Front | 150 | 2600 | 235 | 85 | 1.35s | 2.0 | Heavy bruiser |
-| Wolf Rider | Front | 95 | 1700 | 320 | 80 | 0.9s | 2.2 | Fast charger |
-| Shaman | Middle | 75 | 1300 | 245 | 300 | 1.2s | 1.8 | Magic ranged (Magic) |
+| Wolf Rider | Middle | 95 | 1700 | 320 | 80 | 0.9s | 2.2 | **Cavalry** — deploys behind the front line, flanks along the field edge around it, and dives the enemy backline (duels enemy cavalry first) |
+| Shaman | Middle | 75 | 1300 | 245 | 300 | 1.2s | 1.8 | Magic ranged (Magic) — **heals every enemy ally (itself included) for 120 HP after every 3 normal attacks** |
 | Cyclop | Back | 140 | 4800 | 210 | 460 | 1.1s | 1.2 | Siege thrower (Rock) |
+| Thunder Bird | Back | 110 | 2200 | 300 | 380 | 1.0s | 1.6 | Flying ranged caster with a small top-down lightning strike attack |
 
 ## Spell Cards
 
@@ -81,17 +84,17 @@ Spells consume MP and discard the card on play. The active spell roster is defin
 |---|---:|---|---|---|
 | **Mark** | 1 | Enemy line | Setup | Marked enemies take more damage. |
 | **Quick Shield** | 1 | Ally line | Defense | Give a small shield to one ally line. |
-| **Lucky Draw** | 1 | Player hand | Gamble | Draw 2 spells. First drawn spell costs 2 less. |
+| **Lucky Draw** | 1 | Player hand | Gamble | Draw 2 spells (reveal-then-fly animation). First drawn spell costs 2 less. |
 | **Mana Crystal** | 2 | Player economy | Scaling | Increase Max MP by 1 next wave. |
 | **Slow Field** | 3 | Enemy Front + Middle path | Control | Slow enemies in Front and Middle path. |
 | **Rally** | 3 | Ally line | Buff | Increase attack speed of one ally line. |
-| **Barrier** | 4 | Ally line | Defense | Give a medium shield to one ally line. |
+| **Barrier** | 5 | All allies | Defense | Give a medium shield to all allies. |
 | **Lightning Strike** | 4 | Priority enemy area | Damage | Strike 1-2 high-threat enemies. |
 | **Revive** | 5 | All ally lines | Recovery | Revive limited fallen units once. |
 | **Meteor** | 5 | Enemy line | Big damage | At battle start +1s, drop meteors on one enemy line. |
 | **Emergency Draft** | 6 | Unit reinforcement | Temporary units | Pick 1 of 2 rolled units; spawn it on the field for this wave only. |
 | **Duplicated** | 6 | Ally line | Army swing | Duplicate current units on one ally line this battle. |
-| **Upgrade Unit** | 5+ | Ally unit | Evolution | Upgrade a unit family on the field. Cost rises +1 each use. |
+| **Upgrade Unit** | 5+ | Ally unit | Evolution | Upgrade any unit family on the field. Cost rises +1 each use. |
 
 Fireball and Fortify are still defined in `cards.json` and have generated assets/art, but are flagged `excludeFromInitialDeck` so they do not enter the current player deck or temporary spell rolls.
 
@@ -122,18 +125,20 @@ Spell stats come from `Assets/Config/cards.json` (see [below](#adding-a-new-spel
 | `ReviveFirstDead` | fallen units to revive | HP fraction they return with | unused |
 | `EmergencyDraftUnits` | unit options to roll into the picker | unused | unused |
 | `DuplicatePlayerLineLimited` | unused | unused | unused |
-| `UpgradeUnit` | unused (cost & effect are data-driven from the unit's `evolution` ladder, not these fields) | unused | unused |
+| `UpgradeUnit` | unused (cost is dynamic; effect comes from the unit's `evolution` ladder, or a generic +10% HP/Attack fallback when there is none — not these fields) | unused | unused |
 
 Legacy effect types such as `DuplicateAllPlayerUnits`, `StrengthenAllPlayerUnits`, `ShieldFrontLine`, `RallyAllPlayerUnits`, `LightningStrikePriorityEnemy`, and `HoldSpellForNextTurn` are still implemented in code for possible later reuse, but they are not part of the active config.
 
 ### Targeting & lane requirements
 
-- Ally line targets: **Quick Shield**, **Rally**, **Barrier**, and **Duplicated** must be dropped on a player lane.
+- Ally line targets: **Quick Shield**, **Rally**, and **Duplicated** must be dropped on a player lane (they affect that lane). **Barrier** must also be dropped on the player side, but shields every ally line at once.
 - Enemy line targets: **Mark** and **Meteor** must be dropped on an enemy lane.
 - Fixed or automatic targets: **Lucky Draw**, **Mana Crystal**, **Slow Field**, **Lightning Strike**, and **Revive** can be played without a lane drop. Fireball and Fortify use this shape too, but are currently excluded from the deck.
-- Off-lane drops cancel for every lane-targeted spell.
-- **Modal target:** **Upgrade Unit** and **Emergency Draft** do not use a lane drop. Playing either (click) opens a picker; choosing an option resolves the spell, and Cancel aborts with no MP spent (the card stays in hand). The card is consumed and MP charged only on confirm.
-  - **Upgrade Unit** lists one card per on-field player unit family that can still upgrade.
+- **Forgiving lane hit-testing.** A lane-targeted spell resolves to a lane in `BattlefieldView.FindLaneAtScreenPoint`, which is generous on purpose: (1) dropping the card onto any living unit selects that unit's lane; (2) each lane rect is grown by `_laneTargetPadding` screen pixels; (3) anywhere else on that side maps to the *nearest* lane band, so gaps between lanes don't fall through. To **cancel** a lane-targeted spell, drop it back in the bottom hand zone (`UIManager.IsInCancelZone`), which is checked before lane resolution. Dropping on the wrong side still uses that side's nearest lane only because the card's `TargetsEnemyLane` decides which array (player vs enemy) is searched.
+- **Empty player side cancels ally-line buffs.** Because the nearest-band fallback always yields a lane, a player-ally-line spell (Rally, Quick Shield, Barrier, Duplicated) would otherwise resolve and waste MP even with no player units to affect. `UIManager.HandleCardDragReleased` therefore treats dropping such a spell on the player side as a **cancel** (snap back, no MP) when `BattlefieldView.HasAnyPlayerPresence` is false — i.e. there is neither an on-field player unit nor a pending build/preview. (Click-to-play already can't cast lane-targeted spells, since `TryPlayCard` rejects them without a lane.)
+- **Modal target:** **Upgrade Unit** and **Emergency Draft** do not use a lane drop. Playing either (click *or* drag onto the field) opens a picker; choosing an option resolves the spell, and Cancel aborts with no MP spent (the card stays in hand). The card is consumed and MP charged only on confirm.
+  - **Drag must not fade-destroy these.** Instant spells get detached and fade-destroyed in `UIManager.HandleCardDragReleased` once `TryPlayCard` returns true. Deferred-modal spells return true merely to signal "modal opened" — the card hasn't left the hand — so the handler special-cases `IsUpgradeUnitCard`/`IsEmergencyDraftCard` to **snap the view back** instead. On confirm, `OnCardPlayed → RefreshHand` rebuilds the hand without the card; on cancel it stays. (Skipping this made a dragged Upgrade vanish on cancel, looking like it had been cancelled away.)
+  - **Upgrade Unit** lists one card per upgradeable player unit family — those already on the field, plus the unit you just drafted this wave (the pending preview, before it's summoned at FIGHT). `GetUpgradeableFamiliesOnField` includes the pending build's family.
   - **Emergency Draft** lists 2 randomly-rolled draftable units (in their **current** tier — see below); the chosen unit's full group spawns onto the field as **temporary** reinforcements that are removed when the wave ends. The summon does **not** count against the one-Unit-Card-per-wave rule.
 
 ### Adding a new spell card
@@ -157,10 +162,12 @@ To add a battlefield spell like Fortify, touch these in order:
 > **A third spell shape exists** beyond build-mutating supports and battlefield/instant spells: **deferred-resolution spells with a modal picker**. Two examples exist, both registered in `IsBattlefieldSpell` but short-circuited in `CardPlayManager.TryPlayCard` so they raise an event and open a modal instead of spending MP and resolving inline:
 > - **Upgrade Unit** — raises `OnUpgradeRequested`; [UpgradeSelectionPanel](../Assets/Scripts/UI/UpgradeSelectionPanel.cs) opens; finished by `CommitUpgrade`, which spends the *dynamic* cost from [UpgradeManager](../Assets/Scripts/Managers/UpgradeManager.cs), not `card.mpCost`. See [Units.md → Unit Evolution](Units.md#unit-evolution).
 > - **Emergency Draft** — raises `OnEmergencyDraftRequested`; [EmergencySelectionPanel](../Assets/Scripts/UI/EmergencySelectionPanel.cs) opens with options from `GetEmergencyDraftOptions`; finished by `CommitEmergencyDraft` (flat `card.mpCost`), which calls `BattlefieldView.SummonTemporaryUnit`. Both panels are self-building (construct their own overlay at runtime) and are ensured by `UIManager.EnsureUpgradePanel`/`EnsureEmergencyPanel`.
+>
+> **Lucky Draw is a fourth, animation-only variant** of the deferred shape. Unlike the modal pickers it has no player choice and the play *does* resolve in `TryPlayCard` (MP spent, Lucky Draw card removed), but the rolled cards do **not** enter the hand inline. `TryPlayCard` rolls them (`RollLuckyDrawCards` → `DeckManager.CreateTemporaryCards`, which bakes the `value2` discount into the first card) and raises `OnLuckyDrawResolved(luckyCard, drawnCards)`. `UIManager.PlayLuckyDrawReveal` then plays a reveal-then-fly cinematic — the cards pop up centre-screen, hold, then fly into the hand fan while the existing cards spread to their new slots — and only on arrival calls `CardPlayManager.CommitLuckyDraw`, which finally `AddCards`. If no UI is wired, `TryPlayCard` falls back to committing immediately so the draw is never lost.
 
 ## Draft Phase Rules
 
-1. At the start of each wave, your hand is fully reset to 3 randomly drawn Unit Cards and 5 randomly drawn Spell Cards.
+1. At the start of each wave, your hand is fully reset to 3 randomly drawn Unit Cards and 5 randomly drawn Spell Cards. Each wave's draw is **independent**: cards are sampled at random (with replacement) from the currently-available pool — playing a card never removes it from future draws, so you can never run out of spells. The pool still respects evolution (an evolved family offers its current tier) and `excludeFromInitialDeck` (locked tiers never appear).
 2. You may choose up to **one Unit Card** per wave. After a Unit Card is selected, all remaining Unit Cards leave the hand immediately.
 3. You may cast any number of **Spell Cards** in a wave, limited only by MP.
 4. Playing a Unit card creates a preview — sprites appear at the unit's lane with a translucent tint.
@@ -188,7 +195,7 @@ After a battle ends, before the next draft:
 2. **Wave spawn** — the next scripted enemy wave is spawned. The current prototype loops through 6 waves indefinitely.
 3. **Player revival** — dead player units revive at full HP.
 4. **Lane regroup** — every alive player unit snaps back into its original lane formation.
-5. **Hand reset** — unused cards are discarded, then 3 Unit Cards and 5 Spell Cards are drawn for the next wave.
+5. **Hand reset** — the old hand is dropped, then 3 Unit Cards and 5 Spell Cards are drawn fresh and at random for the next wave (independent each time — no finite draw/discard pile).
 
 The game loops indefinitely: draft → battle → reset → draft → ...
 

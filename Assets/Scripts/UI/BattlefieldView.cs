@@ -22,17 +22,34 @@ namespace DraftCards.UI
         [SerializeField] private FormationLineView[] _playerLines;
         [SerializeField] private FormationLineView[] _enemyLines;
 
-        [SerializeField] private float _laneHalfWidth = 90f;
-        [SerializeField] private float _laneHalfHeight = 180f;
-        [SerializeField] private float _spawnMinDistance = 55f;
+        [SerializeField] private float _laneHalfWidth = 70f;
+        [SerializeField] private float _laneHalfHeight = 150f;
+        [SerializeField] private float _spawnMinDistance = 40f;
         [SerializeField] private int _spawnMaxAttempts = 40;
-        [SerializeField] private float _packXSpacing = 38f;
-        [SerializeField] private float _packYSpacing = 34f;
+        [SerializeField] private float _packXSpacing = 30f;
+        [SerializeField] private float _packYSpacing = 26f;
         [SerializeField] private float _previewSpawnStagger = 0.08f;
         [SerializeField] private float _previewSpawnOffset = 26f;
 
-        [SerializeField] private Vector2 _battleBoundsMin = new(-900f, -40f);
-        [SerializeField] private Vector2 _battleBoundsMax = new(900f, 220f);
+        // Front-rank gating (see IsFrontBlocked). A melee unit only attacks/pushes when no living
+        // ally screens it from its target. _frontBlockMinAdvance is how much closer to the target
+        // (local units) an ally must be to count as "ahead"; _frontBlockCorridor is the half-width
+        // of the screening corridor (about a body radius) — an ally within it, on the path, blocks.
+        [SerializeField] private float _frontBlockMinAdvance = 24f;
+        [SerializeField] private float _frontBlockCorridor = 30f;
+
+        // Infantry band: a wide, short strip. Horizontal room spreads the lanes apart; the
+        // tight vertical span keeps the line-unit formation dense and readable. Line units are
+        // clamped to this band so they don't drift up/down into the cavalry runway.
+        [SerializeField] private Vector2 _battleBoundsMin = new(-1000f, -120f);
+        [SerializeField] private Vector2 _battleBoundsMax = new(1000f, 320f);
+
+        // Cavalry runway: a much taller band that reaches into the empty space above and below
+        // the infantry. Cavalry are clamped to this (not the infantry band) and their flank arc
+        // sweeps along its top/bottom edge — that's the "lane" the player sees them ride through.
+        // See BattleUnit.TryGetFlankDir and CavalryBoundsMin/Max.
+        [SerializeField] private Vector2 _cavalryBoundsMin = new(-1000f, -260f);
+        [SerializeField] private Vector2 _cavalryBoundsMax = new(1000f, 440f);
         [SerializeField] private Sprite _smokeSprite;
         [SerializeField] private Color _summonTextColor = new(1f, 0.85f, 0.2f);
         [SerializeField] private Color _spellTextColor = new(0.55f, 0.85f, 1f);
@@ -43,7 +60,7 @@ namespace DraftCards.UI
         [SerializeField] private float _lightningStrikeDuration = 0.46f;
         [SerializeField] private float _lightningStartHeight = 390f;
         [SerializeField] private float _meteorBattleStartDelay = 1f;
-        [SerializeField] private float _meteorTravelDuration = 0.82f;
+        [SerializeField] private float _meteorTravelDuration = 0.66f;
         [SerializeField] private float _meteorBurnDuration = 2.6f;
 
         private readonly List<BattleUnit> _playerBattleUnits = new();
@@ -68,6 +85,12 @@ namespace DraftCards.UI
         public bool BothSidesAlive => _playerBattleUnits.Count > 0 && _enemyBattleUnits.Count > 0;
         public bool HasAlivePlayer => _playerBattleUnits.Count > 0;
         public bool HasAliveEnemy => _enemyBattleUnits.Count > 0;
+
+        // Whether there is any player unit a player-ally-line buff spell (Rally, Quick Shield,
+        // Barrier, Duplicated) could actually affect: a real unit already on the field, or the
+        // pending build's preview. With neither, such a spell would burn MP on nothing, so the
+        // UI treats dropping one on the empty player side as a cancel.
+        public bool HasAnyPlayerPresence => _playerBattleUnits.Count > 0 || _previewUnits.Count > 0;
 
         private void Awake()
         {
@@ -143,6 +166,10 @@ namespace DraftCards.UI
                 for (int i = 0; i < kv.Value.Count && i < positions.Count; i++)
                 {
                     kv.Value[i].Rect.anchoredPosition = positions[i];
+                    // Reset facing to the unit's home direction. During battle BattleUnit flips
+                    // the sprite toward whatever it was chasing/attacking; back in formation it
+                    // should face the enemy side again (players right, enemies left).
+                    kv.Value[i].View?.SetFacing(isPlayer);
                 }
             }
         }
@@ -150,20 +177,148 @@ namespace DraftCards.UI
         public BattleUnit FindClosestOpponent(BattleUnit self)
         {
             List<BattleUnit> pool = self.IsPlayerUnit ? _enemyBattleUnits : _playerBattleUnits;
-            BattleUnit closest = null;
-            float bestSqr = float.MaxValue;
             Vector2 myPos = self.Rect.anchoredPosition;
+
+            bool isCavalry = self.Group != null && self.Group.UnitType == UnitType.Cavalry;
+            if (!isCavalry)
+            {
+                // Everyone else simply chases the nearest living opponent.
+                BattleUnit nearest = null;
+                float nearestSqr = float.MaxValue;
+                foreach (BattleUnit candidate in pool)
+                {
+                    if (candidate == null || candidate.IsDead) continue;
+                    float sqr = (candidate.Rect.anchoredPosition - myPos).sqrMagnitude;
+                    if (sqr < nearestSqr) { nearestSqr = sqr; nearest = candidate; }
+                }
+                return nearest;
+            }
+
+            // Cavalry skirmishers go for the enemy backline, but settle a cavalry duel first.
+            // We pick the closest candidate in each priority tier in one pass, then choose by
+            // tier so the unit always has a target (never idles):
+            //   1. enemy Cavalry  — two cavalry forces clash in the open before either dives
+            //   2. Back line      — the intended prize (ranged/support/siege)
+            //   3. Middle line
+            //   4. Front line     — last resort
+            BattleUnit bestCavalry = null, bestBack = null, bestMid = null, bestFront = null;
+            float sqrCavalry = float.MaxValue, sqrBack = float.MaxValue,
+                  sqrMid = float.MaxValue, sqrFront = float.MaxValue;
+
             foreach (BattleUnit candidate in pool)
             {
-                if (candidate == null || candidate.IsDead) continue;
+                if (candidate == null || candidate.IsDead || candidate.Group == null) continue;
                 float sqr = (candidate.Rect.anchoredPosition - myPos).sqrMagnitude;
-                if (sqr < bestSqr)
+
+                if (candidate.Group.UnitType == UnitType.Cavalry)
                 {
-                    bestSqr = sqr;
-                    closest = candidate;
+                    if (sqr < sqrCavalry) { sqrCavalry = sqr; bestCavalry = candidate; }
+                    continue; // a cavalry duel target isn't also a line target
+                }
+
+                switch (candidate.Group.Line)
+                {
+                    case FormationLine.Back:
+                        if (sqr < sqrBack) { sqrBack = sqr; bestBack = candidate; }
+                        break;
+                    case FormationLine.Middle:
+                        if (sqr < sqrMid) { sqrMid = sqr; bestMid = candidate; }
+                        break;
+                    default:
+                        if (sqr < sqrFront) { sqrFront = sqr; bestFront = candidate; }
+                        break;
                 }
             }
-            return closest;
+
+            if (bestCavalry != null) return bestCavalry;
+            if (bestBack != null) return bestBack;
+            if (bestMid != null) return bestMid;
+            return bestFront;
+        }
+
+        // True when a living ally of `self` is standing in the gap between `self` and `target` —
+        // so `self` is a rear-rank unit screened by its own front line. Melee units call this to
+        // gate attacking/pushing: only the front rank fights, which is what stops a deep mob from
+        // having all 16 members strike (and shove) through the bodies ahead of them.
+        //
+        // An ally counts as blocking when it is (a) meaningfully closer to the target than we are
+        // — i.e. ahead of us in the advance — and (b) roughly on the line from us to the target,
+        // within a corridor about a body wide. Tunables: _frontBlockMinAdvance, _frontBlockCorridor.
+        public bool IsFrontBlocked(BattleUnit self, BattleUnit target)
+        {
+            if (self == null || target == null) return false;
+
+            List<BattleUnit> allies = self.IsPlayerUnit ? _playerBattleUnits : _enemyBattleUnits;
+            Vector2 myPos = self.Rect.anchoredPosition;
+            Vector2 toTarget = target.Rect.anchoredPosition - myPos;
+            float myDist = toTarget.magnitude;
+            if (myDist <= 0.001f) return false;
+            Vector2 dir = toTarget / myDist;
+
+            foreach (BattleUnit ally in allies)
+            {
+                if (ally == null || ally == self || ally.IsDead) continue;
+
+                Vector2 toAlly = ally.Rect.anchoredPosition - myPos;
+                // How far along the path to the target the ally sits (projection onto dir).
+                float along = Vector2.Dot(toAlly, dir);
+                // Must be ahead of us (toward the target) by a real margin, and not already past
+                // the target — an ally beyond the target isn't screening us from it.
+                if (along < _frontBlockMinAdvance || along > myDist) continue;
+                // Perpendicular distance from the path: inside the corridor = in the way.
+                float perp = Mathf.Abs(toAlly.x * dir.y - toAlly.y * dir.x);
+                if (perp <= _frontBlockCorridor) return true;
+            }
+            return false;
+        }
+
+        // Heals every living unit on the healer's side — itself included — and shows a green
+        // heal pulse only on the ones that actually gained HP. Kept for possible later use
+        // (e.g. a group-heal spell); support healers now use HealAlly (single target) instead.
+        public void HealAllies(BattleUnit healer, int amount)
+        {
+            if (healer == null || amount <= 0) return;
+
+            List<BattleUnit> allies = healer.IsPlayerUnit ? _playerBattleUnits : _enemyBattleUnits;
+            foreach (BattleUnit ally in allies)
+            {
+                if (ally == null || ally.IsDead || ally.Group == null) continue;
+                if (ally.Group.Heal(amount) > 0)
+                {
+                    ally.View?.PlayHealPulse();
+                }
+            }
+        }
+
+        // Support healer (Cleric / Shaman): heal ONE ally — the most-hurt living unit on the
+        // healer's side by HP fraction, with the healer itself eligible. Skips a side that's
+        // already at full HP (no wasted heal, no pulse). Logic stays on UnitGroup; this only
+        // picks the target and drives the green pulse cue. See BattleUnit.PerformAttack.
+        public void HealAlly(BattleUnit healer, int amount)
+        {
+            if (healer == null || amount <= 0) return;
+
+            List<BattleUnit> allies = healer.IsPlayerUnit ? _playerBattleUnits : _enemyBattleUnits;
+            BattleUnit best = null;
+            float bestFraction = 1f;
+            foreach (BattleUnit ally in allies)
+            {
+                if (ally == null || ally.IsDead || ally.Group == null) continue;
+                UnitGroup group = ally.Group;
+                if (group.CurrentHp >= group.MaxHp) continue;
+
+                float fraction = group.MaxHp > 0 ? (float)group.CurrentHp / group.MaxHp : 1f;
+                if (fraction < bestFraction)
+                {
+                    bestFraction = fraction;
+                    best = ally;
+                }
+            }
+
+            if (best != null && best.Group.Heal(amount) > 0)
+            {
+                best.View?.PlayHealPulse();
+            }
         }
 
         public void NotifyDeath(BattleUnit unit)
@@ -178,8 +333,7 @@ namespace DraftCards.UI
                 _reviveBudget--;
                 unit.ReviveInBattle(_reviveHpFraction);
                 Vector2 fxPos = unit.Rect != null ? unit.Rect.anchoredPosition : Vector2.zero;
-                int pct = Mathf.RoundToInt(_reviveHpFraction * 100f);
-                SpawnEffect.Play(_battleFieldRoot, fxPos, $"REVIVE {pct}%", _smokeSprite, _spellTextColor);
+                SpellBurst.Play(_battleFieldRoot, fxPos, SpellBurst.Icon.Plus, _spellTextColor);
                 return;
             }
 
@@ -269,36 +423,84 @@ namespace DraftCards.UI
             foreach (BattleUnit u in _previewUnits) yield return u;
         }
 
+        public bool TryCastUnitLightningStrike(BattleUnit attacker, BattleUnit target, int damage, Sprite lightningSprite)
+        {
+            if (_battleFieldRoot == null || attacker == null || target == null || target.IsDead || damage <= 0) return false;
+
+            StartCoroutine(LightningStrikeRoutine(target, damage, lightningSprite, 0.55f, showSpellBurst: false));
+            return true;
+        }
+
+        // How far (in screen pixels) a lane band is grown past its rect edges so the gaps
+        // between lanes still resolve to the nearest lane instead of dead "off-lane" space.
+        [SerializeField] private float _laneTargetPadding = 60f;
+
         public FormationLine? FindPlayerLaneAtScreenPoint(Vector2 screenPos)
         {
-            if (_playerLines == null) return null;
-            // Strict containment only. Off-lane drops resolve to null so the hover highlight
-            // matches what the user is actually pointing at.
-            foreach (FormationLineView lineView in _playerLines)
-            {
-                if (lineView == null || lineView.transform == null) continue;
-                RectTransform rect = (RectTransform)lineView.transform;
-                if (RectTransformUtility.RectangleContainsScreenPoint(rect, screenPos, null))
-                {
-                    return lineView.Line;
-                }
-            }
-            return null;
+            return FindLaneAtScreenPoint(screenPos, _playerLines, _playerBattleUnits);
         }
 
         public FormationLine? FindEnemyLaneAtScreenPoint(Vector2 screenPos)
         {
-            if (_enemyLines == null) return null;
-            foreach (FormationLineView lineView in _enemyLines)
+            return FindLaneAtScreenPoint(screenPos, _enemyLines, _enemyBattleUnits);
+        }
+
+        // Resolves a drag/drop screen point to a lane on one side. Two ways to hit a lane,
+        // in priority order:
+        //   1. Drop on a living unit  -> select that unit's lane (so the army itself is a target).
+        //   2. Drop in a lane band    -> the lane rect grown by _laneTargetPadding, then the
+        //      whole side mapped to the nearest band so gaps don't fall through to null.
+        private FormationLine? FindLaneAtScreenPoint(Vector2 screenPos, FormationLineView[] lines, List<BattleUnit> units)
+        {
+            if (lines == null) return null;
+
+            // 1. Dropping onto a unit selects that unit's lane.
+            if (units != null)
+            {
+                foreach (BattleUnit u in units)
+                {
+                    if (u == null || u.IsDead || u.Group == null || u.Rect == null) continue;
+                    if (RectTransformUtility.RectangleContainsScreenPoint(u.Rect, screenPos, null))
+                    {
+                        return u.Group.Line;
+                    }
+                }
+            }
+
+            // 2. Padded-rect containment, then nearest-band fallback.
+            FormationLine? nearestLane = null;
+            float nearestDistance = float.MaxValue;
+            foreach (FormationLineView lineView in lines)
             {
                 if (lineView == null || lineView.transform == null) continue;
                 RectTransform rect = (RectTransform)lineView.transform;
-                if (RectTransformUtility.RectangleContainsScreenPoint(rect, screenPos, null))
+
+                Vector3[] corners = new Vector3[4];
+                rect.GetWorldCorners(corners);
+                // Screen-space AABB of the lane rect (corners: 0=BL,1=TL,2=TR,3=BR).
+                Vector2 bl = RectTransformUtility.WorldToScreenPoint(null, corners[0]);
+                Vector2 tr = RectTransformUtility.WorldToScreenPoint(null, corners[2]);
+                float minX = Mathf.Min(bl.x, tr.x) - _laneTargetPadding;
+                float maxX = Mathf.Max(bl.x, tr.x) + _laneTargetPadding;
+                float minY = Mathf.Min(bl.y, tr.y) - _laneTargetPadding;
+                float maxY = Mathf.Max(bl.y, tr.y) + _laneTargetPadding;
+
+                if (screenPos.x >= minX && screenPos.x <= maxX && screenPos.y >= minY && screenPos.y <= maxY)
                 {
                     return lineView.Line;
                 }
+
+                // Distance to the (unpadded) rect, for the nearest-band fallback.
+                Vector2 center = (bl + tr) * 0.5f;
+                float dist = Vector2.Distance(screenPos, center);
+                if (dist < nearestDistance)
+                {
+                    nearestDistance = dist;
+                    nearestLane = lineView.Line;
+                }
             }
-            return null;
+
+            return nearestLane;
         }
 
         private readonly List<GameObject> _laneTargetOverlays = new();
@@ -411,12 +613,23 @@ namespace DraftCards.UI
             }
         }
 
-        public Vector2 ClampToBounds(Vector2 position)
+        public Vector2 ClampToBounds(Vector2 position) => ClampToBounds(position, forCavalry: false);
+
+        // Cavalry clamp to the taller runway so they can sweep into the empty top/bottom space;
+        // everything else stays in the tight infantry band.
+        public Vector2 ClampToBounds(Vector2 position, bool forCavalry)
         {
+            Vector2 min = forCavalry ? _cavalryBoundsMin : _battleBoundsMin;
+            Vector2 max = forCavalry ? _cavalryBoundsMax : _battleBoundsMax;
             return new Vector2(
-                Mathf.Clamp(position.x, _battleBoundsMin.x, _battleBoundsMax.x),
-                Mathf.Clamp(position.y, _battleBoundsMin.y, _battleBoundsMax.y));
+                Mathf.Clamp(position.x, min.x, max.x),
+                Mathf.Clamp(position.y, min.y, max.y));
         }
+
+        public Vector2 BattleBoundsMin => _battleBoundsMin;
+        public Vector2 BattleBoundsMax => _battleBoundsMax;
+        public Vector2 CavalryBoundsMin => _cavalryBoundsMin;
+        public Vector2 CavalryBoundsMax => _cavalryBoundsMax;
 
         public void DuplicatePlayerUnits(PendingUnitBuild pendingBuild, FormationLine? targetLane = null,
             int maxCopies = int.MaxValue, bool temporaryBattleOnly = false)
@@ -508,7 +721,7 @@ namespace DraftCards.UI
             }
 
             Vector2 fxPos = LaneAnchoredPosition(FindLine(true, lane));
-            SpawnEffect.Play(_battleFieldRoot, fxPos, "x2", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxPos, SpellBurst.Icon.Swirl, _spellTextColor);
         }
 
         // Emergency Draft: spawns the chosen unit card's full group onto the field as TEMPORARY
@@ -538,7 +751,7 @@ namespace DraftCards.UI
 
             if (spawned > 0) fxPos /= spawned;
             else fxPos = LineCenter(isPlayer: true, build.line, build);
-            SpawnEffect.Play(_battleFieldRoot, fxPos, $"+{count}", _smokeSprite, _summonTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxPos, SpellBurst.Icon.Plus, _summonTextColor);
             return spawned;
         }
 
@@ -557,7 +770,7 @@ namespace DraftCards.UI
                 pendingBuild.attack = Mathf.Max(0, Mathf.RoundToInt(pendingBuild.attack * multiplier));
             }
 
-            SpawnEffect.Play(_battleFieldRoot, ComputePlayerCenter(pendingBuild), "+50% ATK", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, ComputePlayerCenter(pendingBuild), SpellBurst.Icon.ArrowUp, _spellTextColor);
         }
 
         // Fortify: grants front-line player units full damage immunity for the first
@@ -591,7 +804,7 @@ namespace DraftCards.UI
             Vector2 fxPos = pendingIsFront
                 ? ComputePlayerCenter(pendingBuild)
                 : FrontLineCenter(pendingBuild);
-            SpawnEffect.Play(_battleFieldRoot, fxPos, "SHIELD", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxPos, SpellBurst.Icon.Shield, _spellTextColor);
         }
 
         // Rally: grants every player unit a move/attack-speed bonus for the first
@@ -621,8 +834,7 @@ namespace DraftCards.UI
                 u.Group.ApplyRally(bonus, seconds);
             }
 
-            string label = $"+{Mathf.RoundToInt(bonus * 100f)}% SPD";
-            SpawnEffect.Play(_battleFieldRoot, ComputePlayerCenter(pendingBuild), label, _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, ComputePlayerCenter(pendingBuild), SpellBurst.Icon.ArrowUp, _spellTextColor);
         }
 
         // Revive: arms a budget so the first `count` player units to fall in the coming
@@ -638,7 +850,7 @@ namespace DraftCards.UI
             _reviveHpFraction = Mathf.Max(_reviveHpFraction, Mathf.Clamp01(hpFraction));
 
             int pct = Mathf.RoundToInt(_reviveHpFraction * 100f);
-            SpawnEffect.Play(_battleFieldRoot, ComputePlayerCenter(null), $"REVIVE x{count}", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, ComputePlayerCenter(null), SpellBurst.Icon.Plus, _spellTextColor);
             Debug.Log($"[BattlefieldView] Revive armed: budget={_reviveBudget} hp={pct}%");
         }
 
@@ -687,6 +899,10 @@ namespace DraftCards.UI
                 {
                     ApplyEvolvedBuild(pendingBuild, evolvedTemplate);
                 }
+                else if (step.HpAttackOnly)
+                {
+                    ApplyHpAttackMultiplierToBuild(pendingBuild, step.IncrementalMultiplier);
+                }
                 else
                 {
                     ApplyStatMultiplierToBuild(pendingBuild, step.IncrementalMultiplier);
@@ -694,11 +910,11 @@ namespace DraftCards.UI
             }
 
             if (affected > 0) fxPos /= affected;
-            string label = step.IsEvolution && step.EvolvedCard != null
-                ? step.EvolvedCard.cardName?.ToUpperInvariant()
-                : $"+{Mathf.RoundToInt((step.IncrementalMultiplier - 1f) * 100f)}%";
+            // The per-unit golden level-up pulse + BattlefieldLevelUpVfx already read as an
+            // upgrade; add a single up-arrow burst so it's recognizable even with zero on-field
+            // units (pending-only upgrade). No text — evolution identity comes from the re-skin.
             PlayLevelUpFeedback(vfxUnits);
-            SpawnEffect.Play(_battleFieldRoot, fxPos + new Vector2(0f, 42f), label, _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxPos + new Vector2(0f, 42f), SpellBurst.Icon.ArrowUp, _spellTextColor);
             return affected;
         }
 
@@ -726,6 +942,10 @@ namespace DraftCards.UI
                 // Rebuild the unit's sprites from its now-evolved art.
                 unit.View?.BindReal(unit.Group);
             }
+            else if (step.HpAttackOnly)
+            {
+                unit.Group.ApplyHpAttackMultiplier(step.IncrementalMultiplier);
+            }
             else
             {
                 unit.Group.ApplyStatMultiplier(step.IncrementalMultiplier);
@@ -741,6 +961,13 @@ namespace DraftCards.UI
             build.attackRange *= multiplier;
             build.attackSpeed *= multiplier;
             if (build.projectileSpeed > 0f) build.projectileSpeed *= multiplier;
+        }
+
+        private static void ApplyHpAttackMultiplierToBuild(PendingUnitBuild build, float multiplier)
+        {
+            if (multiplier <= 0f || Mathf.Approximately(multiplier, 1f)) return;
+            build.attack = Mathf.Max(0, Mathf.RoundToInt(build.attack * multiplier));
+            build.hp = Mathf.Max(1, Mathf.RoundToInt(build.hp * multiplier));
         }
 
         // Copies the evolved card's identity/stats/art onto a pending build, so the pending
@@ -765,6 +992,8 @@ namespace DraftCards.UI
             build.projectileAoeRadius = evolved.projectileAoeRadius;
             build.unitType = evolved.unitType;
             build.shadowScale = evolved.shadowScale;
+            build.healEveryAttacks = evolved.healEveryAttacks;
+            build.healAmount = evolved.healAmount;
         }
 
         // Lightning Strike: arms a battle-start spell. The target is chosen when combat
@@ -774,7 +1003,7 @@ namespace DraftCards.UI
             if (damage <= 0 || _battleFieldRoot == null) return;
 
             _pendingLightningStrikes.Add(new PendingLightningStrike(damage, Mathf.Max(0f, battleStartDelay), projectileSprite));
-            SpawnEffect.Play(_battleFieldRoot, ComputeEnemyCenter(), "STORM READY", _smokeSprite, _lightningTextColor);
+            SpellBurst.Play(_battleFieldRoot, ComputeEnemyCenter(), SpellBurst.Icon.Bolt, _lightningTextColor);
         }
 
         public void MarkEnemyLine(FormationLine? targetLane, float bonusDamageTaken)
@@ -792,14 +1021,22 @@ namespace DraftCards.UI
 
             Vector2 fxCenter = LineCenter(isPlayer: false, lane, null);
             BattlefieldMarkVfx.Play(_battleFieldRoot, markedPositions, fxCenter, _markTextColor);
-            SpawnEffect.Play(_battleFieldRoot, fxCenter,
-                "MARK", _smokeSprite, _markTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxCenter, SpellBurst.Icon.Crosshair, _markTextColor);
         }
 
         public void ShieldPlayerLine(FormationLine? targetLane, float seconds, PendingUnitBuild pendingBuild,
             bool playBarrierDome = false)
         {
-            if (!targetLane.HasValue || seconds <= 0f) return;
+            if (seconds <= 0f) return;
+
+            // Barrier shields every ally line at once; Quick Shield only the targeted lane.
+            if (playBarrierDome)
+            {
+                ShieldAllPlayerLines(seconds, pendingBuild);
+                return;
+            }
+
+            if (!targetLane.HasValue) return;
 
             FormationLine lane = targetLane.Value;
             Vector2 fxCenter = LineCenter(isPlayer: true, lane, pendingBuild);
@@ -819,12 +1056,43 @@ namespace DraftCards.UI
                 }
             }
 
-            if (playBarrierDome)
+            SpellBurst.Play(_battleFieldRoot, fxCenter, SpellBurst.Icon.Shield, _spellTextColor);
+        }
+
+        private void ShieldAllPlayerLines(float seconds, PendingUnitBuild pendingBuild)
+        {
+            List<Vector2> positions = new();
+            Vector2 sum = Vector2.zero;
+
+            foreach (BattleUnit u in _playerBattleUnits)
             {
-                BattlefieldBarrierVfx.Play(_battleFieldRoot, PlayerLinePositions(lane), fxCenter, _spellTextColor);
+                if (u == null || u.IsDead || u.Group == null) continue;
+                u.Group.ApplyShield(seconds);
+                if (u.Rect != null)
+                {
+                    positions.Add(u.Rect.anchoredPosition);
+                    sum += u.Rect.anchoredPosition;
+                }
             }
 
-            SpawnEffect.Play(_battleFieldRoot, fxCenter, "SHIELD", _smokeSprite, _spellTextColor);
+            if (pendingBuild != null)
+            {
+                pendingBuild.shieldDuration = Mathf.Max(pendingBuild.shieldDuration, seconds);
+            }
+            foreach (BattleUnit u in _previewUnits)
+            {
+                if (u == null || u.Group == null) continue;
+                u.Group.ApplyShield(seconds);
+                if (u.Rect != null)
+                {
+                    positions.Add(u.Rect.anchoredPosition);
+                    sum += u.Rect.anchoredPosition;
+                }
+            }
+
+            Vector2 fxCenter = positions.Count > 0 ? sum / positions.Count : Vector2.zero;
+            BattlefieldBarrierVfx.Play(_battleFieldRoot, positions, fxCenter, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxCenter, SpellBurst.Icon.Shield, _spellTextColor);
         }
 
         public void RallyPlayerLine(FormationLine? targetLane, float bonus, float seconds, PendingUnitBuild pendingBuild)
@@ -849,8 +1117,8 @@ namespace DraftCards.UI
                 }
             }
 
-            SpawnEffect.Play(_battleFieldRoot, LineCenter(isPlayer: true, lane, pendingBuild),
-                $"+{Mathf.RoundToInt(bonus * 100f)}% SPD", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, LineCenter(isPlayer: true, lane, pendingBuild),
+                SpellBurst.Icon.ArrowUp, _spellTextColor);
         }
 
         public void DamageEnemyLine(FormationLine? targetLane, float damageValue, float fixedLineValue, float markedBonusFraction)
@@ -879,8 +1147,8 @@ namespace DraftCards.UI
 
             ApplyDamageToEnemyLine(lane, damage, markedBonusFraction);
 
-            SpawnEffect.Play(_battleFieldRoot, LineCenter(isPlayer: false, lane, null),
-                $"{damage}", _smokeSprite, _lightningTextColor);
+            SpellBurst.Play(_battleFieldRoot, LineCenter(isPlayer: false, lane, null),
+                SpellBurst.Icon.Bolt, _lightningTextColor);
         }
 
         public void MeteorEnemyLine(FormationLine? targetLane, float damageValue, float markedBonusFraction)
@@ -890,8 +1158,8 @@ namespace DraftCards.UI
 
             FormationLine lane = targetLane.Value;
             _pendingMeteorStrikes.Add(new PendingMeteorStrike(lane, damage, markedBonusFraction, _meteorBattleStartDelay));
-            SpawnEffect.Play(_battleFieldRoot, LineCenter(isPlayer: false, lane, null),
-                "METEOR READY", _smokeSprite, new Color(1f, 0.48f, 0.12f));
+            SpellBurst.Play(_battleFieldRoot, LineCenter(isPlayer: false, lane, null),
+                SpellBurst.Icon.ArrowDown, new Color(1f, 0.48f, 0.12f));
         }
 
         public void SlowEnemyOpeningLines(float slowPercent, float seconds)
@@ -926,8 +1194,8 @@ namespace DraftCards.UI
                 }
             }
 
-            SpawnEffect.Play(_battleFieldRoot, FrontLineCenter(pendingBuild),
-                $"-{Mathf.RoundToInt(reduction * 100f)}% DMG", _smokeSprite, _spellTextColor);
+            SpellBurst.Play(_battleFieldRoot, FrontLineCenter(pendingBuild),
+                SpellBurst.Icon.Shield, _spellTextColor);
         }
 
         public void LightningStrikePriorityEnemies(int damage, int count, Sprite projectileSprite)
@@ -939,7 +1207,7 @@ namespace DraftCards.UI
             {
                 _pendingLightningStrikes.Add(new PendingLightningStrike(damage, 0.2f + i * 0.15f, projectileSprite));
             }
-            SpawnEffect.Play(_battleFieldRoot, ComputeEnemyCenter(), $"STORM x{strikes}", _smokeSprite, _lightningTextColor);
+            SpellBurst.Play(_battleFieldRoot, ComputeEnemyCenter(), SpellBurst.Icon.Bolt, _lightningTextColor);
         }
 
         private void TriggerBattleStartSpells(int token)
@@ -992,7 +1260,9 @@ namespace DraftCards.UI
             BattleUnit target = FindLightningStrikeTarget();
             if (target == null)
             {
-                SpawnEffect.Play(_battleFieldRoot, ComputeEnemyCenter(), "NO TARGET", _smokeSprite, _lightningTextColor);
+                // No living target: a quiet, dim bolt fizzle (no text).
+                SpellBurst.Play(_battleFieldRoot, ComputeEnemyCenter(), SpellBurst.Icon.Bolt,
+                    new Color(_lightningTextColor.r, _lightningTextColor.g, _lightningTextColor.b, 0.4f));
                 return;
             }
 
@@ -1003,14 +1273,12 @@ namespace DraftCards.UI
         {
             List<Vector2> affectedPositions = new();
             float duration = 0f;
-            float slowPercent = 0f;
 
             foreach (BattleUnit u in _enemyBattleUnits)
             {
                 if (u == null || u.IsDead || u.Group == null || !u.Group.IsSlowed) continue;
                 if (u.Rect != null) affectedPositions.Add(SlowFieldVfxPosition(u));
                 duration = Mathf.Max(duration, u.Group.SlowDuration);
-                slowPercent = Mathf.Max(slowPercent, u.Group.SlowPercent);
             }
 
             if (affectedPositions.Count == 0 || duration <= 0f) return;
@@ -1018,8 +1286,7 @@ namespace DraftCards.UI
             List<Vector2> areaPositions = EnemyOpeningLineAreaPositions(affectedPositions);
             Vector2 fxCenter = OpeningEnemyLinesCenter(areaPositions);
             BattlefieldSlowFieldVfx.Play(_battleFieldRoot, areaPositions, fxCenter, duration);
-            SpawnEffect.Play(_battleFieldRoot, fxCenter,
-                $"SLOW {Mathf.RoundToInt(slowPercent * 100f)}%", _smokeSprite, _lightningTextColor);
+            SpellBurst.Play(_battleFieldRoot, fxCenter, SpellBurst.Icon.Snowflake, _lightningTextColor);
         }
 
         private static Vector2 SlowFieldVfxPosition(BattleUnit unit)
@@ -1045,8 +1312,8 @@ namespace DraftCards.UI
             if (lineView == null) return;
 
             Vector2 center = LaneAnchoredPosition(lineView) + new Vector2(0f, 58f);
-            float halfWidth = Mathf.Max(_laneHalfWidth, 125f);
-            float halfHeight = Mathf.Max(_laneHalfHeight * 0.68f, 125f);
+            float halfWidth = Mathf.Max(_laneHalfWidth * 1.55f, 170f);
+            float halfHeight = Mathf.Max(_laneHalfHeight * 0.95f, 170f);
 
             positions.Add(center + new Vector2(-halfWidth, -halfHeight));
             positions.Add(center + new Vector2(-halfWidth, halfHeight));
@@ -1122,6 +1389,8 @@ namespace DraftCards.UI
             public readonly float Delay;
             public readonly float Duration;
             public readonly float Scale;
+            public readonly float BaseAngle;
+            public readonly float FlickerSeed;
 
             public MeteorShard(GameObject root, RectTransform rect, Image trail, Image glow, Image core,
                 Vector2 start, Vector2 impact, float delay, float duration, float scale)
@@ -1136,6 +1405,8 @@ namespace DraftCards.UI
                 Delay = delay;
                 Duration = duration;
                 Scale = scale;
+                BaseAngle = rect != null ? rect.localEulerAngles.z : 0f;
+                FlickerSeed = start.x * 0.043f + start.y * 0.071f + impact.x * 0.019f + impact.y * 0.031f + delay * 23f;
             }
         }
 
@@ -1396,12 +1667,12 @@ namespace DraftCards.UI
 
             MeteorShard[] shards =
             {
-                CreateMeteorShard("MeteorMain", start, impact, 0f, travelDuration, 1.15f, 100f, 235f, cardStyleMain: true),
-                CreateMeteorShard("MeteorFollower_0", start - direction * 92f + side * 42f, impact + side * 38f, 0.11f, travelDuration * 0.84f, 0.45f, 42f, 118f),
-                CreateMeteorShard("MeteorFollower_1", start - direction * 138f - side * 34f, impact - side * 32f, 0.18f, travelDuration * 0.8f, 0.38f, 36f, 105f),
-                CreateMeteorShard("MeteorFollower_2", start - direction * 188f + side * 12f, impact + side * 12f + new Vector2(0f, 24f), 0.26f, travelDuration * 0.76f, 0.32f, 32f, 94f),
-                CreateMeteorShard("MeteorFollower_3", start - direction * 226f + side * 50f, impact + side * 28f + new Vector2(0f, -20f), 0.31f, travelDuration * 0.72f, 0.28f, 28f, 82f),
-                CreateMeteorShard("MeteorFollower_4", start - direction * 260f - side * 44f, impact - side * 26f + new Vector2(0f, 18f), 0.36f, travelDuration * 0.7f, 0.25f, 25f, 76f),
+                CreateMeteorShard("MeteorMain", start, impact, 0f, travelDuration, 1.15f, 100f, 285f, cardStyleMain: true),
+                CreateMeteorShard("MeteorFollower_0", start - direction * 92f + side * 42f, impact + side * 38f, 0.11f, travelDuration * 0.84f, 0.70f, 58f, 142f),
+                CreateMeteorShard("MeteorFollower_1", start - direction * 138f - side * 34f, impact - side * 32f, 0.18f, travelDuration * 0.8f, 0.62f, 52f, 130f),
+                CreateMeteorShard("MeteorFollower_2", start - direction * 188f + side * 12f, impact + side * 12f + new Vector2(0f, 24f), 0.26f, travelDuration * 0.76f, 0.54f, 47f, 116f),
+                CreateMeteorShard("MeteorFollower_3", start - direction * 226f + side * 50f, impact + side * 28f + new Vector2(0f, -20f), 0.31f, travelDuration * 0.72f, 0.48f, 43f, 106f),
+                CreateMeteorShard("MeteorFollower_4", start - direction * 260f - side * 44f, impact - side * 26f + new Vector2(0f, 18f), 0.36f, travelDuration * 0.7f, 0.43f, 40f, 98f),
             };
 
             bool impacted = false;
@@ -1426,8 +1697,8 @@ namespace DraftCards.UI
                     impacted = true;
                     targetPositions = EnemyLinePositions(strike.Lane);
                     ApplyDamageToEnemyLine(strike.Lane, strike.Damage, strike.MarkedBonusFraction);
-                    SpawnEffect.Play(_battleFieldRoot, impact + new Vector2(0f, 34f),
-                        $"METEOR {strike.Damage}", _smokeSprite, new Color(1f, 0.55f, 0.12f));
+                    SpellBurst.Play(_battleFieldRoot, impact + new Vector2(0f, 34f),
+                        SpellBurst.Icon.ArrowDown, new Color(1f, 0.55f, 0.12f));
                     StartCoroutine(MeteorExplosionRoutine(impact, targetPositions, token));
                     StartCoroutine(MeteorBurnRoutine(impact, targetPositions, token));
                 }
@@ -1457,7 +1728,7 @@ namespace DraftCards.UI
             Sprite trailSprite = cardStyleMain ? GetMeteorMainFlameSprite() : GetMeteorTrailSprite();
             Color trailColor = cardStyleMain ? Color.white : new Color(1f, 0.34f, 0.05f, 0.62f);
             Image trail = SpawnChildImage(rect, "Trail", trailSprite, new Vector2(0f, 10f),
-                new Vector2(coreSize * (cardStyleMain ? 2.05f : 1.12f), trailLength), trailColor, new Vector2(0.5f, 0f));
+                new Vector2(coreSize * (cardStyleMain ? 1.05f : 0.98f), trailLength), trailColor, new Vector2(0.5f, 0f));
             Image glow = SpawnChildImage(rect, "Glow", GetLightningBurstSprite(), Vector2.zero,
                 Vector2.one * (coreSize * (cardStyleMain ? 1.85f : 1.55f)), new Color(1f, 0.48f, 0.08f, 0.72f), new Vector2(0.5f, 0.5f));
             Sprite coreSprite = cardStyleMain ? GetMeteorMainRockSprite() : GetMeteorCoreSprite();
@@ -1484,6 +1755,19 @@ namespace DraftCards.UI
             shard.Rect.anchoredPosition = Vector2.Lerp(shard.Start, shard.Impact, eased);
             float fade = raw <= 1f ? 1f : 1f - Smooth01(Mathf.InverseLerp(1f, 1.45f, raw));
             shard.Rect.localScale = Vector3.one * Mathf.Lerp(shard.Scale * 0.72f, shard.Scale * 1.08f, u);
+            float pulse = Mathf.Sin(elapsed * 24f + shard.FlickerSeed);
+            float flutter = Mathf.Sin(elapsed * 37f + shard.FlickerSeed * 1.7f);
+            shard.Rect.localRotation = Quaternion.Euler(0f, 0f, shard.BaseAngle + flutter * 1.8f);
+            if (shard.Trail != null)
+            {
+                RectTransform trailRect = shard.Trail.rectTransform;
+                trailRect.anchoredPosition = new Vector2(flutter * 2.2f, 10f + pulse * 2.6f);
+                trailRect.localScale = new Vector3(1f + pulse * 0.055f, 1f + flutter * 0.085f, 1f);
+            }
+            if (shard.Glow != null)
+            {
+                shard.Glow.rectTransform.localScale = Vector3.one * (1f + pulse * 0.045f);
+            }
             SetMeteorShardAlpha(shard, fade);
         }
 
@@ -1804,25 +2088,31 @@ namespace DraftCards.UI
             for (int y = 0; y < height; y++)
             {
                 float v = (y + 0.5f) / height;
-                float jag = Mathf.Sin(v * 22f) * 0.055f + Mathf.Sin(v * 43f + 1.2f) * 0.026f;
-                float halfOuter = width * Mathf.Lerp(0.58f, 0.09f, v) * (1f + jag);
-                float halfMiddle = halfOuter * 0.68f;
-                float halfInner = halfOuter * 0.38f;
-                float centerOffset = Mathf.Sin(v * 12f + 0.7f) * width * 0.052f;
-                float lengthFade = 1f - Smooth01(Mathf.InverseLerp(0.82f, 1f, v));
+                float t = Smooth01(v);
+                float curve = Mathf.Sin(v * Mathf.PI) * width * 0.075f + Mathf.Sin(v * 8.4f + 0.35f) * width * 0.010f;
+                float tip = center + width * 0.13f;
+                float leftEdge = Mathf.Lerp(center - width * 0.34f, tip - width * 0.005f, t) + curve;
+                float rightEdge = Mathf.Lerp(center + width * 0.21f, tip + width * 0.005f, t) + curve;
+                float span = Mathf.Max(1f, rightEdge - leftEdge);
+                float edgeSoft = Mathf.Lerp(5.5f, 1.3f, v);
+                float tipFade = 1f - Smooth01(Mathf.InverseLerp(0.965f, 1f, v));
+                float baseFade = Mathf.Lerp(0.72f, 1f, Smooth01(Mathf.InverseLerp(0f, 0.13f, v)));
 
                 for (int x = 0; x < width; x++)
                 {
-                    float dx = Mathf.Abs(x - center - centerOffset);
-                    float outer = Mathf.SmoothStep(1f, 0f, dx / Mathf.Max(1f, halfOuter));
-                    float middle = Mathf.SmoothStep(1f, 0f, dx / Mathf.Max(1f, halfMiddle));
-                    float inner = Mathf.SmoothStep(1f, 0f, dx / Mathf.Max(1f, halfInner));
-                    float alpha = outer * lengthFade;
-                    Color color = Color.Lerp(new Color(0.92f, 0.08f, 0.015f, alpha), new Color(1f, 0.50f, 0.035f, alpha), middle);
+                    float outside = Mathf.Max(leftEdge - x, x - rightEdge);
+                    float outer = 1f - Smooth01(Mathf.InverseLerp(0f, edgeSoft, outside));
+                    float q = (x - leftEdge) / span;
+                    float midCenter = Mathf.Lerp(0.55f, 0.50f, v) + Mathf.Sin(v * 5.6f) * 0.014f;
+                    float mid = Mathf.SmoothStep(1f, 0f, Mathf.Abs(q - midCenter) / Mathf.Lerp(0.25f, 0.055f, v)) * outer;
+                    float innerCenter = Mathf.Lerp(0.57f, 0.50f, v) + Mathf.Sin(v * 6.2f + 0.4f) * 0.010f;
+                    float inner = Mathf.SmoothStep(1f, 0f, Mathf.Abs(q - innerCenter) / Mathf.Lerp(0.13f, 0.022f, v)) * outer;
+                    float alpha = outer * tipFade * baseFade;
+                    Color color = Color.Lerp(new Color(0.92f, 0.08f, 0.015f, alpha), new Color(1f, 0.50f, 0.035f, alpha), mid);
                     color = Color.Lerp(color, new Color(1f, 0.94f, 0.18f, alpha), inner);
-                    if (inner > 0.76f)
+                    if (inner > 0.78f)
                     {
-                        color = Color.Lerp(color, new Color(1f, 1f, 0.72f, alpha), (inner - 0.76f) / 0.24f);
+                        color = Color.Lerp(color, new Color(1f, 1f, 0.72f, alpha), (inner - 0.78f) / 0.22f);
                     }
                     color.a = alpha;
                     pixels[y * width + x] = color;
@@ -1848,14 +2138,23 @@ namespace DraftCards.UI
             for (int y = 0; y < height; y++)
             {
                 float v = (y + 0.5f) / height;
-                float halfWidth = Mathf.Lerp(width * 0.34f, width * 0.06f, v);
-                float lengthFade = 1f - v;
+                float t = Smooth01(v);
+                float curve = Mathf.Sin(v * Mathf.PI) * width * 0.068f + Mathf.Sin(v * 8.8f) * width * 0.010f;
+                float tip = center + width * 0.12f;
+                float leftEdge = Mathf.Lerp(center - width * 0.32f, tip - width * 0.005f, t) + curve;
+                float rightEdge = Mathf.Lerp(center + width * 0.20f, tip + width * 0.005f, t) + curve;
+                float span = Mathf.Max(1f, rightEdge - leftEdge);
+                float edgeSoft = Mathf.Lerp(4.2f, 1f, v);
+                float tipFade = 1f - Smooth01(Mathf.InverseLerp(0.96f, 1f, v));
+                float baseFade = Mathf.Lerp(0.68f, 1f, Smooth01(Mathf.InverseLerp(0f, 0.12f, v)));
                 for (int x = 0; x < width; x++)
                 {
-                    float dx = Mathf.Abs(x - center);
-                    float cross = Mathf.SmoothStep(1f, 0f, dx / Mathf.Max(1f, halfWidth));
-                    float alpha = cross * lengthFade * lengthFade;
-                    pixels[y * width + x] = new Color(1f, Mathf.Lerp(0.16f, 0.72f, v), 0.02f, alpha);
+                    float outside = Mathf.Max(leftEdge - x, x - rightEdge);
+                    float outer = 1f - Smooth01(Mathf.InverseLerp(0f, edgeSoft, outside));
+                    float q = (x - leftEdge) / span;
+                    float mid = Mathf.SmoothStep(1f, 0f, Mathf.Abs(q - Mathf.Lerp(0.55f, 0.50f, v)) / Mathf.Lerp(0.23f, 0.052f, v)) * outer;
+                    float alpha = outer * tipFade * baseFade;
+                    pixels[y * width + x] = new Color(1f, Mathf.Lerp(0.18f, 0.72f, mid), 0.02f, alpha);
                 }
             }
             tex.SetPixels(pixels);
@@ -1918,19 +2217,21 @@ namespace DraftCards.UI
             return _meteorSparkSprite;
         }
 
-        private IEnumerator LightningStrikeRoutine(BattleUnit target, int damage, Sprite projectileSprite)
+        private IEnumerator LightningStrikeRoutine(BattleUnit target, int damage, Sprite projectileSprite,
+            float visualScale = 1f, bool showSpellBurst = true)
         {
             if (target == null || target.Rect == null) yield break;
 
+            visualScale = Mathf.Clamp(visualScale, 0.25f, 1.25f);
             Vector2 impact = target.Rect.anchoredPosition;
             Vector2 start = new(
                 Mathf.Clamp(impact.x, _battleBoundsMin.x, _battleBoundsMax.x),
-                _battleBoundsMax.y + _lightningStartHeight);
+                _battleBoundsMax.y + _lightningStartHeight * visualScale);
 
             GameObject sourceGlow = SpawnLightningImage("LightningSourceGlow", start, GetLightningBurstSprite(),
-                new Vector2(150f, 150f), new Color(0.35f, 0.85f, 1f, 0.75f));
+                new Vector2(150f, 150f) * visualScale, new Color(0.35f, 0.85f, 1f, 0.75f));
             GameObject preGlow = SpawnLightningImage("LightningImpactCharge", impact, GetLightningBurstSprite(),
-                new Vector2(120f, 120f), new Color(0.25f, 0.9f, 1f, 0.55f));
+                new Vector2(120f, 120f) * visualScale, new Color(0.25f, 0.9f, 1f, 0.55f));
             yield return LightningChargeRoutine(sourceGlow, preGlow, 0.1f);
 
             if (target != null && !target.IsDead && target.Rect != null)
@@ -1940,21 +2241,24 @@ namespace DraftCards.UI
                 if (sourceGlow != null) ((RectTransform)sourceGlow.transform).anchoredPosition = start;
             }
 
-            GameObject beam = SpawnLightningBeam(start, impact, projectileSprite);
-            List<GameObject> branches = SpawnLightningBranches(start, impact);
+            GameObject beam = SpawnLightningBeam(start, impact, projectileSprite, visualScale);
+            List<GameObject> branches = SpawnLightningBranches(start, impact, visualScale);
             GameObject impactGlow = SpawnLightningImage("LightningImpactBloom", impact, GetLightningBurstSprite(),
-                new Vector2(230f, 230f), new Color(0.35f, 0.9f, 1f, 0.95f));
+                new Vector2(230f, 230f) * visualScale, new Color(0.35f, 0.9f, 1f, 0.95f));
             GameObject shockwave = SpawnLightningImage("LightningShockwave", impact, GetLightningRingSprite(),
-                new Vector2(110f, 110f), new Color(0.55f, 0.95f, 1f, 0.95f));
+                new Vector2(110f, 110f) * visualScale, new Color(0.55f, 0.95f, 1f, 0.95f));
 
-            StartCoroutine(LightningImpactBurstRoutine(impact));
+            StartCoroutine(LightningImpactBurstRoutine(impact, visualScale));
 
             if (target != null && !target.IsDead)
             {
                 target.TakeDamage(damage);
             }
 
-            SpawnEffect.Play(_battleFieldRoot, impact + new Vector2(0f, 24f), $"ZAP {damage}", _smokeSprite, _lightningTextColor);
+            if (showSpellBurst)
+            {
+                SpellBurst.Play(_battleFieldRoot, impact + new Vector2(0f, 24f), SpellBurst.Icon.Bolt, _lightningTextColor);
+            }
 
             float elapsed = 0f;
             float duration = Mathf.Max(0.05f, _lightningStrikeDuration);
@@ -1997,12 +2301,13 @@ namespace DraftCards.UI
             }
         }
 
-        private GameObject SpawnLightningBeam(Vector2 start, Vector2 impact, Sprite projectileSprite)
+        private GameObject SpawnLightningBeam(Vector2 start, Vector2 impact, Sprite projectileSprite, float visualScale = 1f)
         {
             Vector2 direction = start - impact;
             float length = Mathf.Max(1f, direction.magnitude);
+            float beamWidth = _lightningBeamWidth * Mathf.Clamp(visualScale, 0.25f, 1.25f);
             GameObject go = SpawnLightningImage("LightningBeam", impact, GetLightningBeamSprite(),
-                new Vector2(_lightningBeamWidth, length), Color.white);
+                new Vector2(beamWidth, length), Color.white);
             RectTransform rect = (RectTransform)go.transform;
             rect.pivot = new Vector2(0.5f, 0f);
             float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
@@ -2016,7 +2321,7 @@ namespace DraftCards.UI
                 coreRect.anchorMin = coreRect.anchorMax = new Vector2(0.5f, 0f);
                 coreRect.pivot = new Vector2(0.5f, 0.5f);
                 coreRect.anchoredPosition = new Vector2(0f, length * 0.5f);
-                coreRect.sizeDelta = new Vector2(_lightningBeamWidth * 1.15f, length * 0.75f);
+                coreRect.sizeDelta = new Vector2(beamWidth * 1.15f, length * 0.75f);
 
                 Image coreImage = core.AddComponent<Image>();
                 coreImage.sprite = projectileSprite;
@@ -2028,9 +2333,10 @@ namespace DraftCards.UI
             return go;
         }
 
-        private List<GameObject> SpawnLightningBranches(Vector2 start, Vector2 impact)
+        private List<GameObject> SpawnLightningBranches(Vector2 start, Vector2 impact, float visualScale = 1f)
         {
             List<GameObject> branches = new(7);
+            visualScale = Mathf.Clamp(visualScale, 0.25f, 1.25f);
             Vector2 direction = start - impact;
             float length = Mathf.Max(1f, direction.magnitude);
             Vector2 right = new Vector2(direction.y, -direction.x).normalized;
@@ -2038,9 +2344,9 @@ namespace DraftCards.UI
             for (int i = 0; i < 4; i++)
             {
                 float t = 0.22f + i * 0.16f;
-                Vector2 anchor = impact + direction * t + right * (i % 2 == 0 ? -26f : 26f);
+                Vector2 anchor = impact + direction * t + right * (i % 2 == 0 ? -26f : 26f) * visualScale;
                 GameObject branch = SpawnLightningImage($"LightningBranch_{i}", anchor, GetFallbackLightningSprite(),
-                    new Vector2(46f, length * 0.28f), new Color(0.45f, 0.95f, 1f, 0.72f));
+                    new Vector2(46f * visualScale, length * 0.28f), new Color(0.45f, 0.95f, 1f, 0.72f));
                 RectTransform rect = (RectTransform)branch.transform;
                 float side = i % 2 == 0 ? -1f : 1f;
                 rect.localRotation = Quaternion.Euler(0f, 0f, side * (38f + i * 8f));
@@ -2051,8 +2357,8 @@ namespace DraftCards.UI
             {
                 float angle = i * 120f + 18f;
                 Vector2 offset = new(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
-                GameObject branch = SpawnLightningImage($"LightningGroundArc_{i}", impact + offset * 48f,
-                    GetFallbackLightningSprite(), new Vector2(40f, 120f), new Color(0.35f, 0.95f, 1f, 0.72f));
+                GameObject branch = SpawnLightningImage($"LightningGroundArc_{i}", impact + offset * 48f * visualScale,
+                    GetFallbackLightningSprite(), new Vector2(40f, 120f) * visualScale, new Color(0.35f, 0.95f, 1f, 0.72f));
                 RectTransform rect = (RectTransform)branch.transform;
                 rect.localRotation = Quaternion.Euler(0f, 0f, angle - 90f);
                 branches.Add(branch);
@@ -2099,15 +2405,16 @@ namespace DraftCards.UI
             if (go != null) Destroy(go);
         }
 
-        private IEnumerator LightningImpactBurstRoutine(Vector2 impact)
+        private IEnumerator LightningImpactBurstRoutine(Vector2 impact, float visualScale = 1f)
         {
+            visualScale = Mathf.Clamp(visualScale, 0.25f, 1.25f);
             GameObject go = new("LightningImpactFx", typeof(RectTransform));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.SetParent(_battleFieldRoot, false);
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = impact;
-            rect.sizeDelta = new Vector2(150f, 150f);
+            rect.sizeDelta = new Vector2(150f, 150f) * visualScale;
 
             Image image = go.AddComponent<Image>();
             image.sprite = GetLightningBurstSprite();
@@ -2307,6 +2614,8 @@ namespace DraftCards.UI
                 projectileAoeRadius = source.ProjectileAoeRadius,
                 unitType = source.UnitType,
                 shadowScale = source.ShadowScale,
+                healEveryAttacks = source.HealEveryAttacks,
+                healAmount = source.HealAmount,
                 shieldDuration = source.ShieldDuration,
                 rallyBonus = source.RallyBonus,
                 rallyDuration = source.RallyDuration,
@@ -2351,8 +2660,7 @@ namespace DraftCards.UI
             if (lineView != null)
             {
                 Vector2 fxPos = LaneAnchoredPosition(lineView);
-                int summonCount = Mathf.Max(1, build.count);
-                SpawnEffect.Play(_battleFieldRoot, fxPos, $"+{summonCount}", _smokeSprite, _summonTextColor);
+                SpellBurst.Play(_battleFieldRoot, fxPos, SpellBurst.Icon.Plus, _summonTextColor);
             }
 
             _previewSpawnRoutine = StartCoroutine(SpawnPreviewUnitsRoutine(build));
@@ -2520,7 +2828,13 @@ namespace DraftCards.UI
                 Vector2 offset = PackedOffset(i);
                 float x = offset.x * _packXSpacing;
                 float y = offset.y * _packYSpacing;
-                positions.Add(ClampToBounds(center + new Vector2(x, y)));
+                // Per-unit organic jitter so the formation reads as a loose mob (like the enemy
+                // scatter) instead of a ruler-straight grid. Deterministic per index so previews
+                // and the real units they hand off to land on the same spots.
+                Vector2 jitter = PackedJitter(i);
+                positions.Add(ClampToBounds(center + new Vector2(
+                    x + jitter.x * _packXSpacing,
+                    y + jitter.y * _packYSpacing)));
             }
 
             return positions;
@@ -2528,34 +2842,46 @@ namespace DraftCards.UI
 
         private static Vector2 PackedOffset(int index)
         {
-            // Vertical-first packing: stack along Y, then branch into adjacent X columns.
-            switch (index)
-            {
-                case 0: return Vector2.zero;
-                case 1: return new Vector2(0f, 1f);
-                case 2: return new Vector2(0f, -1f);
-                case 3: return new Vector2(0f, 2f);
-                case 4: return new Vector2(0f, -2f);
-                case 5: return new Vector2(-1f, 0f);
-                case 6: return new Vector2(-1f, 1f);
-                case 7: return new Vector2(-1f, -1f);
-                case 8: return new Vector2(-1f, 2f);
-                case 9: return new Vector2(-1f, -2f);
-                case 10: return new Vector2(1f, 0f);
-                case 11: return new Vector2(1f, 1f);
-                case 12: return new Vector2(1f, -1f);
-                case 13: return new Vector2(1f, 2f);
-                case 14: return new Vector2(1f, -2f);
-            }
+            // Vertical-leaning packing: fill a column top-to-bottom, then branch into adjacent
+            // side columns (also filled vertically). Columns are kept to 5 rows so a typical group
+            // forms a compact block (a few short files side by side) rather than one tall 1-wide
+            // line — the line is what looked unnatural next to the enemy mob.
+            const int rowsPerColumn = 5;           // rows in each column before moving sideways
+            const int halfRows = rowsPerColumn / 2; // 2 → column spans Y offsets -2..+2
 
-            // For larger counts, keep adding columns to the side filled top-to-bottom.
-            int adjusted = index - 15;
-            const int rowsPerColumn = 5;
-            int colIndex = adjusted / rowsPerColumn;
-            int rowOffset = adjusted % rowsPerColumn - (rowsPerColumn - 1) / 2;
-            int colSide = (colIndex % 2 == 0) ? -1 : 1;
-            int colMagnitude = 2 + colIndex / 2;
-            return new Vector2(colSide * colMagnitude, rowOffset);
+            int colIndex = index / rowsPerColumn;     // 0 = center, then 1,2,3…
+            int rowInColumn = index % rowsPerColumn;
+
+            // Walk the column outward from center: 0, +1, -1, +2, -2, … so it grows symmetrically.
+            int step = (rowInColumn + 1) / 2;
+            int rowOffset = rowInColumn % 2 == 1 ? step : -step;
+            rowOffset = Mathf.Clamp(rowOffset, -halfRows, halfRows);
+
+            // Center column first, then alternate sides outward: 0, -1, +1, -2, +2, …
+            int colStep = (colIndex + 1) / 2;
+            int colOffset = colIndex == 0 ? 0 : (colIndex % 2 == 1 ? -colStep : colStep);
+
+            return new Vector2(colOffset, rowOffset);
+        }
+
+        // Small deterministic offset per formation slot, in CELL FRACTIONS (caller scales by the
+        // pack spacing). A hashed pseudo-random in roughly ±40% of a cell so the block looks like
+        // a natural cluster, not a grid; same index always yields the same offset so preview→real
+        // handoff stays stable. Separation then settles any overlaps the jitter introduces.
+        private static Vector2 PackedJitter(int index)
+        {
+            float hx = Hash01(index * 2 + 1) - 0.5f;
+            float hy = Hash01(index * 2 + 2) - 0.5f;
+            return new Vector2(hx * 0.8f, hy * 0.8f);
+        }
+
+        private static float Hash01(int n)
+        {
+            // Cheap integer hash → [0,1). Deterministic, no allocation, no Random state poke.
+            uint x = (uint)(n * 374761393 + 668265263);
+            x = (x ^ (x >> 13)) * 1274126177u;
+            x ^= x >> 16;
+            return (x & 0xFFFFFF) / (float)0x1000000;
         }
 
         private bool IsPositionFree(Vector2 candidate, float minDist)
@@ -2621,21 +2947,55 @@ namespace DraftCards.UI
 
             RectTransform rt = (RectTransform)view.transform;
             rt.anchoredPosition = ClampToBounds(position);
-            if (!forPlayer)
-            {
-                Vector3 scale = rt.localScale;
-                scale.x = -Mathf.Abs(scale.x);
-                rt.localScale = scale;
-            }
+            // Initial facing: players look right (toward the enemy side), enemies look left.
+            // Facing is then driven dynamically each frame by BattleUnit (move/attack direction),
+            // so the flip lives on the sprite container — see UnitGroupView.SetFacing — instead
+            // of the hard root mirror this used to do.
+            view.SetFacing(forPlayer);
             if (playDrop) battleUnit.StartDrop();
             return battleUnit;
         }
 
         private Vector2 LaneAnchoredPosition(FormationLineView lineView)
         {
+            EnsureLanesLaidOut();
             Vector2 screenPos = RectTransformUtility.WorldToScreenPoint(null, lineView.transform.position);
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_battleFieldRoot, screenPos, null, out Vector2 localPos);
             return localPos;
+        }
+
+        // The 3 lanes per side are spread horizontally by a HorizontalLayoutGroup on their parent
+        // area; in the scene each lane's anchoredPosition is (0,0) — the layout supplies the X.
+        // The FIRST wave spawns from GameManager.Start() during the same frame the scene loads,
+        // BEFORE Unity's layout system has run its end-of-frame rebuild. At that point every lane
+        // is still stacked at (0,0), so Back/Middle/Front all resolve to the same point and the
+        // Back archer spawns inside the Front cluster. Force the layout up to date once so the
+        // first read sees the real per-lane positions. (Later waves are fine — layout has rebuilt.)
+        private bool _lanesLaidOut;
+        private void EnsureLanesLaidOut()
+        {
+            if (_lanesLaidOut) return;
+            _lanesLaidOut = true;
+            Canvas.ForceUpdateCanvases();
+            // Explicitly rebuild each lane's parent area (the HorizontalLayoutGroup) so the lanes
+            // get their real X before we read them — ForceUpdateCanvases alone can miss a layout
+            // that hasn't registered its first rebuild yet on the load frame.
+            RebuildLaneAreas(_playerLines);
+            RebuildLaneAreas(_enemyLines);
+        }
+
+        private static void RebuildLaneAreas(FormationLineView[] lines)
+        {
+            if (lines == null) return;
+            RectTransform lastArea = null;
+            foreach (FormationLineView lv in lines)
+            {
+                if (lv == null) continue;
+                var area = lv.transform.parent as RectTransform;
+                if (area == null || area == lastArea) continue;
+                lastArea = area;
+                LayoutRebuilder.ForceRebuildLayoutImmediate(area);
+            }
         }
 
         private FormationLineView FindLine(bool isPlayer, FormationLine line)
@@ -2652,9 +3012,9 @@ namespace DraftCards.UI
 
     internal sealed class BattlefieldSlowFieldVfx : MonoBehaviour
     {
-        private const int SnowflakeCount = 64;
-        private static readonly Color SnowColor = new(0.86f, 0.96f, 1f, 1f);
-        private static readonly Color FieldColor = new(0.34f, 0.78f, 1f, 0.32f);
+        private const int SnowflakeCount = 128;
+        private static readonly Color SnowColor = new(0.94f, 0.99f, 1f, 1f);
+        private static readonly Color FieldColor = new(0.22f, 0.78f, 1f, 0.5f);
 
         private readonly List<Snowflake> _snowflakes = new();
         private Image _fieldGlow;
@@ -2684,7 +3044,7 @@ namespace DraftCards.UI
 
             RectTransform rect = (RectTransform)transform;
             rect.anchoredPosition = _bounds.Center;
-            rect.sizeDelta = new Vector2(_bounds.Width + 150f, _bounds.Height + 150f);
+            rect.sizeDelta = new Vector2(_bounds.Width + 220f, _bounds.Height + 220f);
 
             BuildVisuals(rect.sizeDelta);
             StartCoroutine(Animate());
@@ -2693,17 +3053,17 @@ namespace DraftCards.UI
         private void BuildVisuals(Vector2 size)
         {
             _fieldGlow = SpawnImage("ColdMist", GetMistSprite(), Vector2.zero,
-                new Vector2(size.x * 0.92f, size.y * 0.74f), FieldColor);
+                new Vector2(size.x * 1.02f, size.y * 0.9f), FieldColor);
 
             for (int i = 0; i < SnowflakeCount; i++)
             {
                 float n0 = Noise01(i, _bounds.Width);
                 float n1 = Noise01(i + 71, _bounds.Height);
                 float n2 = Noise01(i + 149, _bounds.Center.x + _bounds.Center.y);
-                float sizePx = Mathf.Lerp(5f, 12f, n2);
+                float sizePx = Mathf.Lerp(6f, 15f, n2);
                 Vector2 start = new(
-                    Mathf.Lerp(-size.x * 0.46f, size.x * 0.46f, n0),
-                    Mathf.Lerp(size.y * 0.36f, size.y * 0.58f, n1));
+                    Mathf.Lerp(-size.x * 0.52f, size.x * 0.52f, n0),
+                    Mathf.Lerp(size.y * 0.32f, size.y * 0.62f, n1));
 
                 Image image = SpawnImage($"Snow_{i}", GetSnowflakeSprite(), start,
                     Vector2.one * sizePx, new Color(SnowColor.r, SnowColor.g, SnowColor.b, 0f));
@@ -2714,8 +3074,8 @@ namespace DraftCards.UI
                     Image = image,
                     Start = start,
                     Delay = Mathf.Lerp(0f, _duration * 0.72f, Noise01(i + 227, _bounds.Width)),
-                    Fall = Mathf.Lerp(size.y * 0.46f, size.y * 0.72f, Noise01(i + 311, _bounds.Height)),
-                    Drift = Mathf.Lerp(-42f, 42f, n2),
+                    Fall = Mathf.Lerp(size.y * 0.5f, size.y * 0.82f, Noise01(i + 311, _bounds.Height)),
+                    Drift = Mathf.Lerp(-58f, 58f, n2),
                     Scale = Mathf.Lerp(0.8f, 1.35f, n1)
                 });
             }
@@ -2752,7 +3112,7 @@ namespace DraftCards.UI
                     flake.Rect.localScale = Vector3.one * flake.Scale;
 
                     float flakeFade = Mathf.Sin(cycle * Mathf.PI) * visible * fieldAlpha;
-                    SetAlpha(flake.Image, 0.88f * flakeFade);
+                    SetAlpha(flake.Image, 0.96f * flakeFade);
                 }
 
                 yield return null;
@@ -2884,7 +3244,7 @@ namespace DraftCards.UI
             {
                 if (points == null || points.Count == 0)
                 {
-                    return new SlowFieldBounds(fallbackCenter, 250f, 190f);
+                    return new SlowFieldBounds(fallbackCenter, 420f, 300f);
                 }
 
                 Vector2 sum = Vector2.zero;
@@ -2899,8 +3259,8 @@ namespace DraftCards.UI
                 }
 
                 Vector2 center = sum / points.Count;
-                float width = Mathf.Max(250f, max.x - min.x + 110f);
-                float height = Mathf.Max(190f, max.y - min.y + 130f);
+                float width = Mathf.Max(420f, max.x - min.x + 180f);
+                float height = Mathf.Max(300f, max.y - min.y + 190f);
                 return new SlowFieldBounds(center, width, height);
             }
         }
@@ -2910,7 +3270,7 @@ namespace DraftCards.UI
     {
         private const float Duration = 0.9f;
         private const int BlinkCount = 3;
-        private const float DomeScale = 1.5f;
+        private const float DomeScale = 2.1f;
 
         private Image _dome;
         private Image _baseRing;
@@ -2938,8 +3298,13 @@ namespace DraftCards.UI
             _bounds = DomeBounds.From(unitPositions, fallbackCenter);
             _color = color;
 
+            // Nudge the dome up & right so it sits centered over the unit cluster rather than
+            // landing low-left of it (the base ring pushes the visual down, and the player
+            // cluster sits left-of-field).
+            Vector2 offset = new(_bounds.Diameter * 0.10f, _bounds.Diameter * 0.18f);
+
             RectTransform rect = (RectTransform)transform;
-            rect.anchoredPosition = _bounds.Center;
+            rect.anchoredPosition = _bounds.Center + offset;
             rect.sizeDelta = new Vector2(_bounds.Diameter, _bounds.Diameter);
 
             BuildVisuals();

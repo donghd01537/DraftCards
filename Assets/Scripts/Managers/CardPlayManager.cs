@@ -52,11 +52,27 @@ namespace DraftCards.Managers
         // spawns it as a temporary reinforcement. Like Upgrade, the card is not consumed and
         // no MP is spent until the player confirms a choice (Cancel keeps the card).
         public event Action<CardData> OnEmergencyDraftRequested;
+        // Raised when a Lucky Draw card resolves. MP is already spent and the Lucky Draw card is
+        // already removed from the hand; the rolled cards have NOT yet entered the hand. The UI
+        // plays a reveal-then-fly animation and commits the cards to the hand on arrival (via
+        // CommitLuckyDraw) so the fan re-positions smoothly. If nothing handles this event the
+        // cards would be lost, so TryPlayCard commits them immediately as a fallback.
+        public event Action<CardData, List<CardData>> OnLuckyDrawResolved;
 
         public UpgradeManager UpgradeManager => _upgradeManager;
 
         public PendingUnitBuild PendingUnitBuild => _pendingUnitBuild;
         public bool HasPendingUnit => _pendingUnitBuild != null;
+
+        // True when the player has enough MP for this card's (possibly dynamic) cost. Lets the UI
+        // distinguish "can't afford" from other un-playable reasons (board full, already played)
+        // so it can blink the MP cost red rather than silently refuse.
+        public bool CanAffordCard(CardData card)
+        {
+            if (card == null) return false;
+            if (_mpManager == null) return true;
+            return _mpManager.CanPay(EffectiveMpCost(card));
+        }
 
         public bool CanPlayCard(CardData card)
         {
@@ -78,7 +94,7 @@ namespace DraftCards.Managers
                     return GetUpgradeableFamiliesOnField().Count > 0;
                 }
 
-                if (!_mpManager.CanPay(card.mpCost)) return false;
+                if (!_mpManager.CanPay(EffectiveMpCost(card))) return false;
                 if (IsBattlefieldSpell(card)) return true;
                 return _pendingUnitBuild != null;
             }
@@ -134,7 +150,28 @@ namespace DraftCards.Managers
                 return true;
             }
 
-            if (!_mpManager.Spend(card.mpCost)) return false;
+            // Lucky Draw resolves now (spend MP, remove the card, roll the cards) but hands the
+            // rolled cards to the UI for a reveal-then-fly animation instead of dropping them
+            // straight into the hand. The UI commits them on arrival via CommitLuckyDraw.
+            if (IsLuckyDrawCard(card))
+            {
+                if (!_mpManager.Spend(EffectiveMpCost(card))) return false;
+                List<CardData> drawn = RollLuckyDrawCards(card);
+                _handManager.Remove(card);
+                OnCardPlayed?.Invoke();
+                if (OnLuckyDrawResolved != null)
+                {
+                    OnLuckyDrawResolved.Invoke(card, drawn);
+                }
+                else
+                {
+                    // No animator wired — don't lose the draw.
+                    CommitLuckyDraw(drawn);
+                }
+                return true;
+            }
+
+            if (!_mpManager.Spend(EffectiveMpCost(card))) return false;
 
             bool isBattlefieldSpell = IsBattlefieldSpell(card);
             if (isBattlefieldSpell)
@@ -162,19 +199,24 @@ namespace DraftCards.Managers
         // (dynamic) MP cost, advances the family's upgrade level, applies the result to on-field
         // units and the pending summon, swaps the evolved card into the deck pool, then discards
         // the Upgrade card. Returns false (and changes nothing) if the play is no longer valid.
-        public bool CommitUpgrade(CardData card, string familyRootId)
+        // chosenEvolveToId selects a branch when the family's next upgrade is a player choice
+        // (e.g. Knight's 2nd upgrade → Spartan OR Holy Knight). The UpgradeSelectionPanel collects
+        // it via a second pick; it is null/ignored for non-branching upgrades.
+        public bool CommitUpgrade(CardData card, string familyRootId, string chosenEvolveToId = null)
         {
             if (!IsUpgradeUnitCard(card) || _upgradeManager == null) return false;
             if (string.IsNullOrEmpty(familyRootId) || !_upgradeManager.CanUpgrade(familyRootId)) return false;
 
-            int cost = _upgradeManager.CurrentMpCost;
+            // EffectiveMpCost = CurrentMpCost minus any one-off discount on the card (e.g. a Lucky
+            // Draw first-card discount). The escalation still keys off CurrentMpCost in ApplyUpgrade.
+            int cost = EffectiveMpCost(card);
             if (!_mpManager.CanPay(cost)) return false;
 
             // Look up the family's current card BEFORE applying the upgrade so a deck swap
             // replaces the right pool entry on an evolution step.
             CardData beforeCard = _upgradeManager.GetCurrentCard(familyRootId);
 
-            UpgradeManager.UpgradeStep step = _upgradeManager.ApplyUpgrade(familyRootId);
+            UpgradeManager.UpgradeStep step = _upgradeManager.ApplyUpgrade(familyRootId, chosenEvolveToId);
             if (!step.Valid) return false;
 
             if (!_mpManager.Spend(cost)) return false;
@@ -235,7 +277,7 @@ namespace DraftCards.Managers
         {
             if (!IsEmergencyDraftCard(card) || chosenUnit == null) return false;
             if (!CanPlayCard(card)) return false;
-            if (!_mpManager.Spend(card.mpCost)) return false;
+            if (!_mpManager.Spend(EffectiveMpCost(card))) return false;
 
             if (_battlefieldView != null)
             {
@@ -245,6 +287,43 @@ namespace DraftCards.Managers
             _handManager.Remove(card);
             OnCardPlayed?.Invoke();
             return true;
+        }
+
+        public static bool IsLuckyDrawCard(CardData card)
+        {
+            if (card == null || card.supportEffects == null) return false;
+            foreach (SupportEffectData e in card.supportEffects)
+            {
+                if (e.effectType == SupportEffectType.DrawTemporarySpellCards) return true;
+            }
+            return false;
+        }
+
+        // Rolls the spell cards Lucky Draw grants this play: `value` random Support cards, with the
+        // first discounted by `value2` MP. Pure roll — does not touch the hand or MP (TryPlayCard
+        // already spent MP). The UI reveals these then commits them via CommitLuckyDraw.
+        private List<CardData> RollLuckyDrawCards(CardData card)
+        {
+            int count = 0;
+            int discount = 0;
+            foreach (SupportEffectData e in card.supportEffects)
+            {
+                if (e.effectType == SupportEffectType.DrawTemporarySpellCards)
+                {
+                    count = Mathf.Max(count, Mathf.RoundToInt(e.value));
+                    discount = Mathf.Max(discount, Mathf.RoundToInt(e.value2));
+                }
+            }
+            if (count <= 0) count = 2;
+            return _deckManager.CreateTemporaryCards(CardType.Support, count, discount);
+        }
+
+        // Adds the rolled Lucky Draw cards to the hand. Called by the UI once the reveal-and-fly
+        // animation reaches the hand, so the fan re-positions in sync with the cards arriving.
+        public void CommitLuckyDraw(List<CardData> drawnCards)
+        {
+            if (drawnCards == null || drawnCards.Count == 0) return;
+            _handManager.AddCards(drawnCards);
         }
 
         public PendingUnitBuild ConsumePendingBuild()
@@ -319,15 +398,17 @@ namespace DraftCards.Managers
             return false;
         }
 
-        // The MP cost of playing the Upgrade card right now (dynamic, escalates per use), or
-        // the card's own mpCost for any other card.
+        // The MP cost of playing this card right now: the Upgrade card's dynamic cost (escalates
+        // per use) or any other card's static mpCost, minus any one-off discount baked onto the
+        // card (e.g. the cheaper first card from a Lucky Draw). Single source of truth for what a
+        // card costs — used for the hand cost display, affordability, and the spend itself.
         public int EffectiveMpCost(CardData card)
         {
-            if (IsUpgradeUnitCard(card) && _upgradeManager != null)
-            {
-                return _upgradeManager.CurrentMpCost;
-            }
-            return card != null ? card.mpCost : 0;
+            if (card == null) return 0;
+            int baseCost = (IsUpgradeUnitCard(card) && _upgradeManager != null)
+                ? _upgradeManager.CurrentMpCost
+                : card.mpCost;
+            return Mathf.Max(0, baseCost - card.mpDiscount);
         }
 
         // The distinct on-field player unit families that can still be upgraded. Returns each
@@ -354,7 +435,21 @@ namespace DraftCards.Managers
                 if (!canUpgrade) continue;
                 result.Add(root);
             }
-            Debug.Log($"[CardPlayManager] GetUpgradeableFamiliesOnField: {total} alive player units → {result.Count} upgradeable families");
+
+            // The unit the player just drafted this wave is still a pending preview (not yet in
+            // PlayerUnits — it's summoned at FIGHT), but Upgrade is meant to be able to target it:
+            // CommitUpgrade/UpgradeOnFieldUnits already apply the step to the pending build. Without
+            // this, the first wave you place a unit you can't upgrade it until after a battle.
+            if (_pendingUnitBuild != null && !_pendingUnitBuild.temporaryBattleOnly)
+            {
+                string root = _pendingUnitBuild.familyId;
+                if (!string.IsNullOrEmpty(root) && !result.Contains(root) && _upgradeManager.CanUpgrade(root))
+                {
+                    result.Add(root);
+                }
+            }
+
+            Debug.Log($"[CardPlayManager] GetUpgradeableFamiliesOnField: {total} alive player units (+pending {(_pendingUnitBuild != null ? _pendingUnitBuild.familyId : "none")}) → {result.Count} upgradeable families");
             return result;
         }
 

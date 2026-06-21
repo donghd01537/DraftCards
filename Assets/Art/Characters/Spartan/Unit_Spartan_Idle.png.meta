@@ -4,7 +4,7 @@ TextureImporter:
   internalIDToNameTable:
   - first:
       213: -7741508761955984946
-    second: Unit_Knight_Idle_0
+    second: Unit_Spartan_Idle_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Unit_Knight_Idle_0
+      name: Unit_Spartan_Idle_0
       rect:
         serializedVersion: 2
-        x: 7
-        y: 24
-        width: 99
-        height: 114
+        x: 0
+        y: 0
+        width: 116
+        height: 156
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Unit_Knight_Idle_0: -7741508761955984946
+      Unit_Spartan_Idle_0: -7741508761955984946
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

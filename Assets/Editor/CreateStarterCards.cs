@@ -67,6 +67,7 @@ namespace DraftCards.EditorTools
                         moveSpeed: u.moveSpeed, attackRange: u.attackRange, attackCooldown: u.attackCooldown, attackSpeed: u.attackSpeed,
                         unitType: ParseUnitType(u.unitType, u.id), projectileFile: u.projectileSprite, projectileSpeed: u.projectileSpeed,
                         projectileAoeRadius: u.projectileAoeRadius, shadowScale: u.shadowScale,
+                        healEveryAttacks: u.healEveryAttacks, healAmount: u.healAmount,
                         familyRootId: u.familyRootId, excludeFromInitialDeck: u.excludeFromInitialDeck, evolution: u.evolution);
                 }
             }
@@ -91,7 +92,8 @@ namespace DraftCards.EditorTools
                         attack: e.attack, hp: e.hp, line: ParseLine(e.line, e.id),
                         moveSpeed: e.moveSpeed, attackRange: e.attackRange, attackCooldown: e.attackCooldown, attackSpeed: e.attackSpeed,
                         unitType: ParseUnitType(e.unitType, e.id), projectileFile: e.projectileSprite, projectileSpeed: e.projectileSpeed,
-                        projectileAoeRadius: e.projectileAoeRadius, shadowScale: e.shadowScale);
+                        projectileAoeRadius: e.projectileAoeRadius, shadowScale: e.shadowScale,
+                        healEveryAttacks: e.healEveryAttacks, healAmount: e.healAmount);
                 }
             }
 
@@ -141,7 +143,7 @@ namespace DraftCards.EditorTools
             {
                 return type;
             }
-            Debug.LogWarning($"[DraftCards] Card '{id}': invalid unitType '{value}'. Defaulting to Ground. Valid: Ground/Flying.");
+            Debug.LogWarning($"[DraftCards] Card '{id}': invalid unitType '{value}'. Defaulting to Ground. Valid: Ground/Flying/Cavalry.");
             return UnitType.Ground;
         }
 
@@ -159,6 +161,7 @@ namespace DraftCards.EditorTools
             int attack, int hp, int count, FormationLine line,
             float moveSpeed, float attackRange, float attackCooldown, float attackSpeed,
             UnitType unitType, string projectileFile, float projectileSpeed, float projectileAoeRadius, float shadowScale,
+            int healEveryAttacks = 0, int healAmount = 0,
             string familyRootId = null, bool excludeFromInitialDeck = false, EvolutionConfig[] evolution = null)
         {
             CardData card = ScriptableObject.CreateInstance<CardData>();
@@ -179,7 +182,9 @@ namespace DraftCards.EditorTools
                 projectileSpeed = projectileSpeed,
                 projectileAoeRadius = Mathf.Max(0f, projectileAoeRadius),
                 unitType = unitType,
-                shadowScale = shadowScale > 0f ? shadowScale : 1f
+                shadowScale = shadowScale > 0f ? shadowScale : 1f,
+                healEveryAttacks = Mathf.Max(0, healEveryAttacks),
+                healAmount = Mathf.Max(0, healAmount)
             };
             card.supportEffects = new List<SupportEffectData>();
             card.artwork = LoadCardSprite(spriteFile);
@@ -195,21 +200,38 @@ namespace DraftCards.EditorTools
             {
                 foreach (EvolutionConfig e in evolution)
                 {
-                    card.evolutionLevels.Add(new EvolutionLevel
-                    {
-                        statMultiplier = e.statMultiplier > 0f ? e.statMultiplier : 1f,
-                        evolveToId = e.evolveToId
-                    });
+                    card.evolutionLevels.Add(ToEvolutionLevel(e));
                 }
             }
 
             SaveCardAsset(card, id, CardOutputFolder);
         }
 
+        // Converts one JSON evolution rung into an EvolutionLevel, recursively resolving a
+        // branching rung's options (e.g. Knight's 2nd upgrade → Spartan OR Holy Knight).
+        private static EvolutionLevel ToEvolutionLevel(EvolutionConfig e)
+        {
+            EvolutionLevel level = new()
+            {
+                statMultiplier = e.statMultiplier > 0f ? e.statMultiplier : 1f,
+                evolveToId = e.evolveToId
+            };
+            if (e.branches != null && e.branches.Length > 0)
+            {
+                level.branches = new List<EvolutionLevel>();
+                foreach (EvolutionConfig branch in e.branches)
+                {
+                    level.branches.Add(ToEvolutionLevel(branch));
+                }
+            }
+            return level;
+        }
+
         private static void CreateEnemyCard(string id, string name, string enemyFolder,
             int attack, int hp, FormationLine line,
             float moveSpeed, float attackRange, float attackCooldown, float attackSpeed,
-            UnitType unitType, string projectileFile, float projectileSpeed, float projectileAoeRadius, float shadowScale)
+            UnitType unitType, string projectileFile, float projectileSpeed, float projectileAoeRadius, float shadowScale,
+            int healEveryAttacks = 0, int healAmount = 0)
         {
             CardData card = ScriptableObject.CreateInstance<CardData>();
             card.cardId = id;
@@ -229,7 +251,9 @@ namespace DraftCards.EditorTools
                 projectileSpeed = projectileSpeed,
                 projectileAoeRadius = Mathf.Max(0f, projectileAoeRadius),
                 unitType = unitType,
-                shadowScale = shadowScale > 0f ? shadowScale : 1f
+                shadowScale = shadowScale > 0f ? shadowScale : 1f,
+                healEveryAttacks = Mathf.Max(0, healEveryAttacks),
+                healAmount = Mathf.Max(0, healAmount)
             };
             card.supportEffects = new List<SupportEffectData>();
             // Enemy art ships with attack frames only — reuse the first frame as the
@@ -426,6 +450,9 @@ namespace DraftCards.EditorTools
             public float projectileSpeed;
             public float projectileAoeRadius;
             public float shadowScale;
+            // Support healer fields (optional): heal all allies every healEveryAttacks swings.
+            public int healEveryAttacks;
+            public int healAmount;
             // Unit Upgrade / Evolution fields (optional).
             public string familyRootId;
             public bool excludeFromInitialDeck;
@@ -437,6 +464,9 @@ namespace DraftCards.EditorTools
         {
             public float statMultiplier;
             public string evolveToId;
+            // Optional branch options at this rung. When set, the player chooses one of these
+            // (each its own rung); this rung's own statMultiplier/evolveToId are then ignored.
+            public EvolutionConfig[] branches;
         }
 
         [System.Serializable]
@@ -457,6 +487,9 @@ namespace DraftCards.EditorTools
             public float projectileSpeed;
             public float projectileAoeRadius;
             public float shadowScale;
+            // Support healer fields (optional): heal all allies every healEveryAttacks swings.
+            public int healEveryAttacks;
+            public int healAmount;
         }
 
         [System.Serializable]

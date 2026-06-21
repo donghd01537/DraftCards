@@ -40,15 +40,17 @@ The in-stage Unit Upgrade system is implemented as the **Upgrade Unit** spell. I
 ### Player-facing flow
 
 1. Play the **Upgrade Unit** spell (click it in hand). This opens a **modal picker**.
-2. The picker shows one card per distinct on-field player unit **family** that can still upgrade, with a hint of the next step (`+10% all stats` or `→ Spartan`).
-3. Choose one to upgrade that family; **Cancel** aborts with no MP spent and the card kept.
+2. The picker shows one card per distinct player unit **family** — both families already summoned on the field **and** the unit you just drafted this wave (still a pending preview, summoned at FIGHT) — each with a hint of the next step (`+10% HP / ATK`, `+10% all stats`, `→ Spartan`, or a branch like `→ Spartan / Holy Knight`). Every family can upgrade, so you can upgrade a freshly-placed unit before its first battle.
+3. Choose one to upgrade that family. If the next step is a **branching evolution** (e.g. the Swordsman's 2nd upgrade), a **second pick** opens listing the options (Spartan vs Holy Knight); choosing one commits down that branch. **Cancel** at either step aborts with no MP spent and the card kept.
 
 ### Rules
 
 - **Dynamic cost:** the first Upgrade this run costs **5 MP**, and each subsequent Upgrade costs **+1 more** (6, 7, …). The counter **persists for the whole run** and never resets. The `mpCost: 5` in `cards.json` is only the starting cost.
-- **Upgrade ladder per family:** a unit family is identified by its base (root) unit's `cardId`. Upgrading walks the family's `evolution` ladder one rung per use:
-  - **Stat-only rung** (`statMultiplier`, no `evolveToId`): scales the on-field units' stats (and the pending summon) by that factor. The Swordsman's first rung is `+10%` all stats.
-  - **Evolution rung** (`evolveToId` set): the family changes identity. On-field units **re-skin** to the evolved card (new art, name, stats), and the evolved card **replaces the base in the deck pool** — future Unit draws deal the evolved form and the base never reappears this run. Swordsman's second rung evolves it to **Spartan**.
+- **Every unit can upgrade.** A unit family is identified by its base (root) unit's `cardId`. Upgrading walks the family's `evolution` ladder one rung per use; once the ladder is exhausted — or for any family that has **no** `evolution` ladder at all (Archer, Cleric, …) — the upgrade falls back to a **generic, repeatable +10% to HP and Attack only** (other stats untouched). The picker hint reads `+10% HP / ATK` for the generic bump and `+10% all stats` for an authored stat rung.
+  - **Stat-only rung** (`statMultiplier`, no `evolveToId`): scales the on-field units' **every** stat (and the pending summon) by that factor. The Swordsman's first rung is `+10%` all stats.
+  - **Evolution rung** (`evolveToId` set): the family changes identity. On-field units **re-skin** to the evolved card (new art, name, stats), and the evolved card **replaces the base in the deck pool** — future Unit draws deal the evolved form and the base never reappears this run.
+  - **Branching rung** (`branches` set): the player **chooses** one of several evolution options. The Swordsman's 2nd rung branches to **Spartan** (offensive — higher ATK / attack speed) **or** **Holy Knight** (defensive — higher HP). Each branch is itself an evolution rung; the chosen one resolves exactly like a single evolution rung (re-skin + deck-pool swap to that form). UpgradeManager records which branch was taken (`_evolvedIdByRoot`) so the family's current card stays correct afterward, and further upgrades fall back to the generic +10% HP/ATK bump.
+  - **Generic fallback rung** (no ladder, or ladder exhausted): a flat **+10% HP/Attack**, repeatable forever, applied to the units present (and the pending summon). It does **not** mutate the deck pool, so later draws of that unit start at base — same one-time-buff semantics as an authored stat-only rung. The multiplier is tunable on [UpgradeManager](../Assets/Scripts/Managers/UpgradeManager.cs)`._genericStatMultiplier`.
 - **What an upgrade affects:** the units of that family already on the battlefield, the current pending summon (and its previews) if it belongs to the family, and — on an evolution — the draftable card pool. A stat-only upgrade is a one-time buff to the units present; it does **not** retroactively buff Swordsmen drafted later (only the evolution changes the pool).
 - **Upgrade feedback:** the battlefield plays one group-level level-up VFX at the affected family's center, then applies a small flash/scale pulse to each affected unit and preview. This is presentation-only; it does not affect upgrade rules or stats.
 - More than one upgrade may happen in a wave if MP allows.
@@ -57,19 +59,31 @@ The in-stage Unit Upgrade system is implemented as the **Upgrade Unit** spell. I
 
 Add an `evolution` array and `familyRootId` to the base unit in [cards.json](../Assets/Config/cards.json), and add the evolved form as its own `units` entry flagged `excludeFromInitialDeck` so it can't be drafted before it's unlocked. The evolved card's authored stats should **bake in** any carried stat multiplier from earlier rungs (re-skin uses the evolved card's absolute stats).
 
+A rung becomes a **branch** by giving it a `branches` array instead of a direct `evolveToId`; each entry is a normal rung the player can pick.
+
 ```json
 {
   "id": "swordsman_3", "name": "Swordsman x3", "characterFolder": "Knight", ...,
   "familyRootId": "swordsman_3",
   "evolution": [
     { "statMultiplier": 1.10 },
-    { "statMultiplier": 1.0, "evolveToId": "spartan_3" }
+    { "branches": [
+        { "statMultiplier": 1.0, "evolveToId": "spartan_3" },
+        { "statMultiplier": 1.0, "evolveToId": "holy_knight_3" }
+    ] }
   ]
 },
 {
   "id": "spartan_3", "name": "Spartan x3", "characterFolder": "Spartan",
   "spriteFile": "Units/Spartan_3.png",
   "attack": 121, "hp": 2860, ...,   // = Swordsman base x1.10, baked in
+  "familyRootId": "swordsman_3",
+  "excludeFromInitialDeck": true
+},
+{
+  "id": "holy_knight_3", "name": "Holy Knight x3", "characterFolder": "Holy Knight",
+  "spriteFile": "Units/Holy Knight_3.png",
+  "attack": 116, "hp": 3200, ...,   // defensive sibling of Spartan, stats baked in
   "familyRootId": "swordsman_3",
   "excludeFromInitialDeck": true
 }
@@ -86,7 +100,7 @@ Add an `evolution` array and `familyRootId` to the base unit in [cards.json](../
 
 ### Future evolution direction
 
-- Each base unit should first pass through a simple stat bump before specializing; later tiers should branch into clear roles. Only the Swordsman→Spartan chain is authored today; more chains are config-only additions.
+- Each base unit should first pass through a simple stat bump before specializing; later tiers should branch into clear roles. Only the Swordsman→Spartan chain is authored today; more chains are config-only additions. Any family without an authored chain still upgrades via the generic +10% HP/Attack fallback, so adding a chain is purely an enhancement.
 
 ## Step 1 — Add the Art
 

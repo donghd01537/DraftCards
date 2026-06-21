@@ -45,48 +45,80 @@ namespace DraftCards.Managers
         // once the last wave has been cleared, so play continues indefinitely.
         private static readonly EnemySpawn[][] _waves =
         {
-            // Wave 1: Goblin x8 (front)
+            // Wave 1: Goblin x10 (front) + Goblin Archer x1 (back)
             new[]
             {
-                new EnemySpawn("goblin", 8, FormationLine.Front),
+                new EnemySpawn("goblin", 10, FormationLine.Front),
+                new EnemySpawn("goblin_archer", 1, FormationLine.Back),
             },
-            // Wave 2: Goblin x8 (front) + Goblin Archer x2 (back)
+            // Wave 2: Goblin x10 (front) + Wolf Rider x2 (middle) + Goblin Archer x3 (back)
             new[]
             {
-                new EnemySpawn("goblin", 8, FormationLine.Front),
-                new EnemySpawn("goblin_archer", 2, FormationLine.Back),
+                new EnemySpawn("goblin", 10, FormationLine.Front),
+                new EnemySpawn("wolf_rider", 2, FormationLine.Middle),
+                new EnemySpawn("goblin_archer", 3, FormationLine.Back),
             },
-            // Wave 3: Goblin x12 (front) + Goblin Archer x2 (back)
-            new[]
-            {
-                new EnemySpawn("goblin", 12, FormationLine.Front),
-                new EnemySpawn("goblin_archer", 2, FormationLine.Back),
-            },
-            // Wave 4: Orc x1 + Goblin x8 (front) + Goblin Archer x2 (back)
-            new[]
-            {
-                new EnemySpawn("orc", 1, FormationLine.Front),
-                new EnemySpawn("goblin", 8, FormationLine.Front),
-                new EnemySpawn("goblin_archer", 2, FormationLine.Back),
-            },
-            // Wave 5: Orc x2 + Goblin x8 (front) + Shaman x1 (middle) + Goblin Archer x4 (back)
+            // Wave 3: Orc x2 + Goblin x10 (front) + Wolf Rider x4 (middle) + Goblin Archer x4 (back)
             new[]
             {
                 new EnemySpawn("orc", 2, FormationLine.Front),
-                new EnemySpawn("goblin", 8, FormationLine.Front),
-                new EnemySpawn("shaman", 1, FormationLine.Middle),
+                new EnemySpawn("goblin", 10, FormationLine.Front),
+                new EnemySpawn("wolf_rider", 4, FormationLine.Middle),
                 new EnemySpawn("goblin_archer", 4, FormationLine.Back),
             },
-            // Wave 6: Orc x2 + Wolf Rider x2 + Goblin x8 (front) + Shaman x2 (middle)
-            //         + Goblin Archer x4 + Cyclop x1 (back)
+            // Wave 4: Orc x3 + Goblin x10 (front) + Shaman x2 + Wolf Rider x6 (middle)
+            //         + Goblin Archer x4 (back)
             new[]
             {
-                new EnemySpawn("orc", 2, FormationLine.Front),
-                new EnemySpawn("wolf_rider", 2, FormationLine.Front),
-                new EnemySpawn("goblin", 8, FormationLine.Front),
+                new EnemySpawn("orc", 3, FormationLine.Front),
+                new EnemySpawn("goblin", 10, FormationLine.Front),
                 new EnemySpawn("shaman", 2, FormationLine.Middle),
+                new EnemySpawn("wolf_rider", 6, FormationLine.Middle),
                 new EnemySpawn("goblin_archer", 4, FormationLine.Back),
+            },
+            // Wave 5: Orc x4 + Goblin x12 (front) + Shaman x3 + Wolf Rider x8 (middle)
+            //         + Goblin Archer x5 (back)
+            new[]
+            {
+                new EnemySpawn("orc", 4, FormationLine.Front),
+                new EnemySpawn("goblin", 12, FormationLine.Front),
+                new EnemySpawn("shaman", 3, FormationLine.Middle),
+                new EnemySpawn("wolf_rider", 8, FormationLine.Middle),
+                new EnemySpawn("goblin_archer", 5, FormationLine.Back),
+            },
+            // Wave 6: Orc x4 + Goblin x14 (front) + Shaman x3 + Wolf Rider x8 (middle)
+            //         + Goblin Archer x5 + Thunder Bird x2 (back)
+            new[]
+            {
+                new EnemySpawn("orc", 4, FormationLine.Front),
+                new EnemySpawn("goblin", 14, FormationLine.Front),
+                new EnemySpawn("shaman", 3, FormationLine.Middle),
+                new EnemySpawn("wolf_rider", 8, FormationLine.Middle),
+                new EnemySpawn("goblin_archer", 5, FormationLine.Back),
+                new EnemySpawn("thunder_bird", 2, FormationLine.Back),
+            },
+            // Wave 7: Orc x5 + Goblin x14 (front) + Shaman x3 + Wolf Rider x8 (middle)
+            //         + Goblin Archer x5 + Cyclop x1 (back)
+            new[]
+            {
+                new EnemySpawn("orc", 5, FormationLine.Front),
+                new EnemySpawn("goblin", 14, FormationLine.Front),
+                new EnemySpawn("shaman", 3, FormationLine.Middle),
+                new EnemySpawn("wolf_rider", 8, FormationLine.Middle),
+                new EnemySpawn("goblin_archer", 5, FormationLine.Back),
                 new EnemySpawn("cyclop", 1, FormationLine.Back),
+            },
+            // Wave 8: Orc x6 + Goblin x16 (front) + Shaman x4 + Wolf Rider x10 (middle)
+            //         + Goblin Archer x6 + Cyclop x2 + Thunder Bird x3 (back)
+            new[]
+            {
+                new EnemySpawn("orc", 6, FormationLine.Front),
+                new EnemySpawn("goblin", 16, FormationLine.Front),
+                new EnemySpawn("shaman", 4, FormationLine.Middle),
+                new EnemySpawn("wolf_rider", 10, FormationLine.Middle),
+                new EnemySpawn("goblin_archer", 6, FormationLine.Back),
+                new EnemySpawn("cyclop", 2, FormationLine.Back),
+                new EnemySpawn("thunder_bird", 3, FormationLine.Back),
             },
         };
 
@@ -167,16 +199,13 @@ namespace DraftCards.Managers
             // cast last turn can't bleed into this round.
             if (_battlefieldView != null) _battlefieldView.ResetTurnEffects();
 
-            // Discard any leftover hand cards so each round starts with a fresh draw.
-            foreach (Data.CardData card in _handManager.Cards)
-            {
-                if (heldCards.Contains(card)) continue;
-                _deckManager.Discard(card);
-            }
+            // Each wave draws a fresh, independent hand: leftover cards are simply dropped (there
+            // is no finite draw/discard pool to recycle into — DrawRandom samples the available
+            // cards each time), so the spell pool can never run dry no matter how many you play.
             _handManager.Clear();
 
-            _handManager.AddCards(_deckManager.Draw(CardType.Unit, _unitCardsPerWave));
-            _handManager.AddCards(_deckManager.Draw(CardType.Support, _spellCardsPerWave));
+            _handManager.AddCards(_deckManager.DrawRandom(CardType.Unit, _unitCardsPerWave));
+            _handManager.AddCards(_deckManager.DrawRandom(CardType.Support, _spellCardsPerWave));
             _handManager.AddCards(heldCards);
             ChangeState(GameState.SelectCardPhase);
         }

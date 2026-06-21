@@ -101,6 +101,7 @@ namespace DraftCards.UI
 
                 CardView view = Instantiate(_cardViewPrefab, _cardListContainer);
                 view.Bind(unitCard);
+                view.DisableHoverLift();
                 view.SetInteractable(true);
                 RectTransform rect = (RectTransform)view.transform;
                 rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);

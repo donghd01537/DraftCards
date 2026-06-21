@@ -46,7 +46,11 @@ namespace DraftCards.Core
     public enum UnitType
     {
         Ground,
-        Flying
+        Flying,
+        // Mounted skirmisher: deployed behind the front line but still pushes forward, and
+        // its targeting ignores enemy Front-line units, diving for the Middle/Back instead
+        // (see BattleUnit.FindClosestOpponent target filtering / BattlefieldView).
+        Cavalry
     }
 
     public enum GameState

@@ -22,6 +22,7 @@ MonoBehaviour:
   artwork: {fileID: -7545006596017091847, guid: 39f161491fdcb6140a341ff24297ce01, type: 3}
   mpCost: 0
   temporary: 0
+  mpDiscount: 0
   unitData:
     attack: 110
     hp: 2600
@@ -35,16 +36,26 @@ MonoBehaviour:
     projectileSpeed: 0
     projectileAoeRadius: 0
     shadowScale: 1
+    healEveryAttacks: 0
+    healAmount: 0
   supportEffects: []
-  idleSprite: {fileID: -7741508761955984946, guid: 49fc82c7f2d9aa449ba637f9db575ac8, type: 3}
+  idleSprite: {fileID: 21300000, guid: 786a5613c1353164d928c26dbedd263d, type: 3}
   attackFrames:
-  - {fileID: 1988080426221799119, guid: c60a97c412ce40c4a811fd88f2e15371, type: 3}
-  - {fileID: -3484685789492208550, guid: d14e133293bd49d428dd9ae3f0722e68, type: 3}
+  - {fileID: 21300000, guid: 6335fdeff6a05184eaa88a1a593d7a69, type: 3}
+  - {fileID: 21300000, guid: 4319dd72469e8af42a1d2e62fa100b9f, type: 3}
   projectileSprite: {fileID: 0}
   evolutionLevels:
   - statMultiplier: 1.1
     evolveToId: 
+    branches: []
   - statMultiplier: 1
-    evolveToId: spartan_3
+    evolveToId: 
+    branches:
+    - statMultiplier: 1
+      evolveToId: spartan_3
+      branches: []
+    - statMultiplier: 1
+      evolveToId: holy_knight_3
+      branches: []
   excludeFromInitialDeck: 0
   familyRootId: swordsman_3

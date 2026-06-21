@@ -53,6 +53,47 @@ namespace DraftCards.Managers
             Shuffle(_drawPile);
         }
 
+        // Each wave's hand is drawn fresh and independently: pick `count` random cards of the
+        // given type from everything currently available, WITH replacement and WITHOUT removing
+        // them from any pile. There is no finite draw/discard economy for the hand — playing a
+        // card never shrinks the pool, so the player can always draw a full hand every wave.
+        //
+        // "Available" is sampled from the live piles (draw + discard) rather than Resources so
+        // that evolution swaps still apply: once a family evolves, ReplaceCardInPool has already
+        // rewritten the piles to the evolved card, and locked higher tiers (excludeFromInitialDeck)
+        // never entered the piles, so they can't appear.
+        public List<CardData> DrawRandom(CardType cardType, int count)
+        {
+            List<CardData> result = new(Mathf.Max(0, count));
+            if (count <= 0) return result;
+
+            List<CardData> candidates = new();
+            CollectDistinct(_drawPile, cardType, candidates);
+            CollectDistinct(_discardPile, cardType, candidates);
+
+            if (candidates.Count == 0)
+            {
+                Debug.LogWarning($"[DeckManager] No {cardType} cards available to draw. " +
+                                 "Run 'DraftCards > Create Starter Cards' and check the starting deck.");
+                return result;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                result.Add(candidates[Random.Range(0, candidates.Count)]);
+            }
+            return result;
+        }
+
+        private static void CollectDistinct(IList<CardData> source, CardType cardType, List<CardData> into)
+        {
+            foreach (CardData card in source)
+            {
+                if (card == null || card.cardType != cardType || card.temporary) continue;
+                if (!into.Contains(card)) into.Add(card);
+            }
+        }
+
         public CardData DrawOne()
         {
             if (_drawPile.Count == 0)
@@ -221,7 +262,10 @@ namespace DraftCards.Managers
                 copy.temporary = true;
                 if (i == 0 && firstMpDiscount > 0)
                 {
-                    copy.mpCost = Mathf.Max(0, copy.mpCost - firstMpDiscount);
+                    // Store the discount rather than mutating mpCost: a card whose real cost is
+                    // dynamic (Upgrade Unit reads UpgradeManager.CurrentMpCost, not mpCost) would
+                    // otherwise lose the discount entirely. EffectiveMpCost applies it for all cards.
+                    copy.mpDiscount = firstMpDiscount;
                 }
                 result.Add(copy);
             }

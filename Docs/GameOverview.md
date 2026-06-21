@@ -42,8 +42,8 @@ The current Unity prototype implements the core draft -> battle -> reset loop, b
 |---|---|
 | Pre-stage deck building | Not implemented. `DeckManager` loads generated player cards from `Resources/Cards`. |
 | Commander choice | Not implemented. |
-| Unit Upgrade | Not implemented. The design target spends MP on Unit Upgrade from the same pool as Spell Cards. |
-| Wave count | Prototype uses 6 scripted waves in `GameManager`, then loops back to Wave 1. |
+| Unit Upgrade | Implemented as the Upgrade Unit spell. It spends MP from the same pool as Spell Cards and can upgrade or evolve a unit family during planning. |
+| Wave count | Prototype uses 8 scripted waves in `GameManager`, then loops back to Wave 1. |
 | Player card choice | Current hand is reset to 3 Unit Cards and 5 Spell Cards each wave. |
 | Army persistence | Implemented. Player units revive and regroup between waves. |
 

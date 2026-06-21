@@ -53,6 +53,7 @@ namespace DraftCards.UI
                 _pendingChangedHandler = HandlePendingBuildChanged;
                 _cardPlayManager.OnPendingBuildChanged += _pendingChangedHandler;
                 _cardPlayManager.OnCardPlayed += HandleCardPlayed;
+                _cardPlayManager.OnLuckyDrawResolved += HandleLuckyDrawResolved;
             }
             if (_gameManager != null) _gameManager.OnStateChanged += HandleStateChanged;
 
@@ -110,6 +111,7 @@ namespace DraftCards.UI
                     _pendingChangedHandler = null;
                 }
                 _cardPlayManager.OnCardPlayed -= HandleCardPlayed;
+                _cardPlayManager.OnLuckyDrawResolved -= HandleLuckyDrawResolved;
             }
             if (_gameManager != null) _gameManager.OnStateChanged -= HandleStateChanged;
         }
@@ -128,6 +130,169 @@ namespace DraftCards.UI
             _lastHoveredDragLane = null;
         }
 
+        // Lucky Draw resolved: the rolled cards aren't in the hand yet. Play a reveal-then-fly
+        // cinematic, then commit them so the fan re-positions exactly as the cards arrive.
+        private void HandleLuckyDrawResolved(CardData luckyCard, List<CardData> drawnCards)
+        {
+            if (drawnCards == null || drawnCards.Count == 0)
+            {
+                return;
+            }
+            // If the scene lacks the bits the animation needs, just commit instantly (no loss).
+            if (_handContainer == null || _cardViewPrefab == null || _cardPlayManager == null)
+            {
+                _cardPlayManager?.CommitLuckyDraw(drawnCards);
+                return;
+            }
+            StartCoroutine(PlayLuckyDrawReveal(drawnCards));
+        }
+
+        [Header("Lucky Draw reveal")]
+        [SerializeField] private float _luckyRevealScale = 1.35f;
+        [SerializeField] private float _luckyRevealSpread = 280f;   // px between the two centered cards (clear gap, no overlap)
+        [SerializeField] private float _luckyAppearDuration = 0.28f;
+        [SerializeField] private float _luckyHoldDuration = 0.55f;
+        [SerializeField] private float _luckyFlyDuration = 0.5f;
+        [SerializeField] private float _luckyStagger = 0.08f;       // per-card delay so they cascade
+
+        private IEnumerator PlayLuckyDrawReveal(List<CardData> drawnCards)
+        {
+            _playingCardAnimation = true;
+            RefreshHandInteractable();
+
+            int existing = _cardViews.Count;
+            int incoming = drawnCards.Count;
+            int newTotal = existing + incoming;
+
+            // Where the hand container sits in its own anchored space; cards start their reveal at
+            // canvas center, which we express relative to the hand container so the fly lands right.
+            RectTransform handRect = (RectTransform)_handContainer;
+            Vector2 centerInHand = WorldCenterAnchored(handRect);
+
+            // Spawn the reveal cards parented to the hand so their coords share fan space. They show
+            // fully opaque (active, like a normal card) — no fade — and pop in with a scale punch.
+            List<RectTransform> temps = new(incoming);
+            float spreadStart = -(incoming - 1) * 0.5f * _luckyRevealSpread;
+            for (int i = 0; i < incoming; i++)
+            {
+                CardView view = Instantiate(_cardViewPrefab, _handContainer);
+                view.Bind(drawnCards[i]);
+                // Show the same effective cost the card will have in the hand (dynamic Upgrade cost
+                // and/or the Lucky-Draw first-card discount), so the reveal matches what lands.
+                if (_cardPlayManager != null && drawnCards[i] != null && drawnCards[i].cardType == CardType.Support)
+                {
+                    view.SetCostOverride(_cardPlayManager.EffectiveMpCost(drawnCards[i]));
+                }
+                // Keep it visually "active" (white artwork, not the grey disabled tint). The
+                // CanvasGroup below blocks clicks during the reveal instead.
+                view.SetInteractable(true);
+                RectTransform rect = (RectTransform)view.transform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = centerInHand + new Vector2(spreadStart + i * _luckyRevealSpread, 0f);
+                rect.localRotation = Quaternion.identity;
+                rect.localScale = Vector3.one * (_luckyRevealScale * 0.8f);
+                rect.SetAsLastSibling();
+                // Disable raycasts only (no alpha animation) so the cards aren't clickable mid-reveal.
+                CanvasGroup cg = view.gameObject.GetComponent<CanvasGroup>();
+                if (cg == null) cg = view.gameObject.AddComponent<CanvasGroup>();
+                cg.alpha = 1f;
+                cg.blocksRaycasts = false;
+                temps.Add(rect);
+            }
+
+            // Appear: pure scale pop so they read as "dealt" (fully visible the whole time).
+            float elapsed = 0f;
+            while (elapsed < _luckyAppearDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / _luckyAppearDuration);
+                float eased = 1f - (1f - t) * (1f - t);
+                for (int i = 0; i < temps.Count; i++)
+                {
+                    if (temps[i] != null) temps[i].localScale = Vector3.one * Mathf.Lerp(_luckyRevealScale * 0.8f, _luckyRevealScale, eased);
+                }
+                yield return null;
+            }
+
+            yield return new WaitForSeconds(_luckyHoldDuration);
+
+            // Fly phase: existing cards spread to their future slots while the reveal cards fly to
+            // the tail slots of the new fan. Capture starts first so both motions interpolate cleanly.
+            Vector2[] existingStartPos = new Vector2[existing];
+            Quaternion[] existingStartRot = new Quaternion[existing];
+            for (int i = 0; i < existing; i++)
+            {
+                RectTransform r = (RectTransform)_cardViews[i].transform;
+                existingStartPos[i] = r.anchoredPosition;
+                existingStartRot[i] = r.localRotation;
+            }
+
+            Vector2[] tempStartPos = new Vector2[incoming];
+            for (int i = 0; i < incoming; i++)
+            {
+                tempStartPos[i] = temps[i] != null ? temps[i].anchoredPosition : centerInHand;
+            }
+
+            float flyTotal = _luckyFlyDuration + _luckyStagger * Mathf.Max(0, incoming - 1);
+            elapsed = 0f;
+            while (elapsed < flyTotal)
+            {
+                elapsed += Time.deltaTime;
+
+                // Reslide the existing hand toward its new layout for the whole window.
+                float spreadT = Mathf.Clamp01(elapsed / _luckyFlyDuration);
+                float spreadEased = 1f - (1f - spreadT) * (1f - spreadT);
+                for (int i = 0; i < existing; i++)
+                {
+                    if (_cardViews[i] == null) continue;
+                    RectTransform r = (RectTransform)_cardViews[i].transform;
+                    FanPose(i, newTotal, out Vector2 target, out Quaternion targetRot);
+                    r.anchoredPosition = Vector2.Lerp(existingStartPos[i], target, spreadEased);
+                    r.localRotation = Quaternion.Slerp(existingStartRot[i], targetRot, spreadEased);
+                }
+
+                // Reveal cards fly to their tail slots, staggered.
+                for (int i = 0; i < incoming; i++)
+                {
+                    if (temps[i] == null) continue;
+                    float start = i * _luckyStagger;
+                    float t = Mathf.Clamp01((elapsed - start) / _luckyFlyDuration);
+                    float eased = 1f - (1f - t) * (1f - t);
+                    FanPose(existing + i, newTotal, out Vector2 target, out Quaternion targetRot);
+                    temps[i].anchoredPosition = Vector2.Lerp(tempStartPos[i], target, eased);
+                    temps[i].localRotation = Quaternion.Slerp(Quaternion.identity, targetRot, eased);
+                    temps[i].localScale = Vector3.Lerp(Vector3.one * _luckyRevealScale, Vector3.one, eased);
+                }
+                yield return null;
+            }
+
+            // Commit to the hand: RefreshHand rebuilds the fan at exactly the slots we flew to, so
+            // the handoff is seamless. Then drop the reveal copies.
+            _cardPlayManager.CommitLuckyDraw(drawnCards);
+            foreach (RectTransform r in temps)
+            {
+                if (r != null) Destroy(r.gameObject);
+            }
+
+            _playingCardAnimation = false;
+            RefreshHandInteractable();
+        }
+
+        // The hand container's local-anchored coordinate for the canvas centre, so reveal cards can
+        // start centre-screen while parented to the hand (whose origin is near the bottom).
+        private Vector2 WorldCenterAnchored(RectTransform handRect)
+        {
+            Canvas canvas = GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            Vector2 screenCenter = new(Screen.width * 0.5f, Screen.height * 0.5f);
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(handRect, screenCenter, cam, out Vector2 local))
+            {
+                return local;
+            }
+            return new Vector2(0f, 260f);
+        }
+
         private void HandleStateChanged(GameState state)
         {
             bool drafting = state == GameState.DrawPhase
@@ -144,6 +309,62 @@ namespace DraftCards.UI
             {
                 _mpText.text = current.ToString();
             }
+        }
+
+        // Draws the player's eye to the MP pool when they try to play a card they can't afford:
+        // flashes the number red while punching its scale up/down and shaking it side to side.
+        // Restores the resting color/scale/position when done.
+        private void PlayMpDeniedFeedback()
+        {
+            if (_mpText == null) return;
+            if (_mpDeniedFeedback != null) StopCoroutine(_mpDeniedFeedback);
+            _mpDeniedFeedback = StartCoroutine(MpDeniedFeedbackRoutine());
+        }
+
+        private Coroutine _mpDeniedFeedback;
+        private static readonly Color _mpDeniedColor = new(0.95f, 0.2f, 0.18f, 1f);
+
+        private IEnumerator MpDeniedFeedbackRoutine()
+        {
+            RectTransform rect = _mpText.rectTransform;
+            Color baseColor = _mpText.color;
+            Vector3 baseScale = rect.localScale;
+            Vector2 basePos = rect.anchoredPosition;
+
+            const float duration = 0.45f;
+            const float shakeMagnitude = 7f;   // px peak side-to-side
+            const float shakeFreq = 34f;        // rad/sec
+            const float zoomAmount = 0.35f;     // peak extra scale
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                if (_mpText == null) yield break;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float decay = 1f - t;                       // settle out over time
+                float pulse = Mathf.Sin(t * Mathf.PI);      // 0→1→0 across the window
+
+                // Blink red 3 times, easing back to the base color as it settles.
+                float redBlend = (Mathf.Sin(t * Mathf.PI * 6f) * 0.5f + 0.5f) * decay;
+                _mpText.color = Color.Lerp(baseColor, _mpDeniedColor, redBlend);
+
+                // Zoom punch.
+                rect.localScale = baseScale * (1f + zoomAmount * pulse);
+
+                // Horizontal shake, amplitude decaying with time.
+                rect.anchoredPosition = basePos + new Vector2(Mathf.Sin(elapsed * shakeFreq) * shakeMagnitude * decay, 0f);
+
+                yield return null;
+            }
+
+            if (_mpText != null)
+            {
+                _mpText.color = baseColor;
+                rect.localScale = baseScale;
+                rect.anchoredPosition = basePos;
+            }
+            _mpDeniedFeedback = null;
         }
 
         private void RefreshHand()
@@ -165,9 +386,10 @@ namespace DraftCards.UI
                 CardData card = _handManager.Cards[i];
                 CardView view = Instantiate(_cardViewPrefab, _handContainer);
                 view.Bind(card);
-                // The Upgrade card's cost escalates each use, so show the live cost, not the
-                // static config value.
-                if (_cardPlayManager != null && CardPlayManager.IsUpgradeUnitCard(card))
+                // Show the live effective cost rather than the static config value: the Upgrade
+                // card's cost escalates each use, and Lucky-Draw cards may carry a one-off discount.
+                // For an ordinary card with no discount this equals mpCost, so the face is unchanged.
+                if (_cardPlayManager != null && card != null && card.cardType == CardType.Support)
                 {
                     view.SetCostOverride(_cardPlayManager.EffectiveMpCost(card));
                 }
@@ -190,25 +412,32 @@ namespace DraftCards.UI
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.localScale = Vector3.one;
 
+            FanPose(index, total, out Vector2 anchored, out Quaternion rotation);
+            rect.anchoredPosition = anchored;
+            rect.localRotation = rotation;
+            rect.localScale = Vector3.one;
+        }
+
+        // The resting anchored position + rotation a card at `index` of `total` takes in the hand
+        // fan. Pure (mutates nothing) so animations can fly cards toward a slot before the hand is
+        // rebuilt there. Mirrors the math applied in PositionInFan.
+        private void FanPose(int index, int total, out Vector2 anchored, out Quaternion rotation)
+        {
             if (total <= 1)
             {
-                rect.anchoredPosition = Vector2.zero;
-                rect.localRotation = Quaternion.identity;
-                rect.localScale = Vector3.one;
+                anchored = Vector2.zero;
+                rotation = Quaternion.identity;
                 return;
             }
 
             float center = (total - 1) / 2f;
             float t = (index - center) / center;
-
             float x = (index - center) * _fanSpacing;
             float y = -t * t * _fanArcDrop;
             float angle = -t * _fanMaxAngle;
-
-            rect.anchoredPosition = new Vector2(x, y);
-            rect.localRotation = Quaternion.Euler(0f, 0f, angle);
+            anchored = new Vector2(x, y);
+            rotation = Quaternion.Euler(0f, 0f, angle);
         }
 
         // A card finished a hover/drag and dropped back into the fan. Reassert the whole hand's
@@ -231,7 +460,14 @@ namespace DraftCards.UI
             }
             foreach (CardView view in _cardViews)
             {
-                view.SetInteractable(!_playingCardAnimation && _cardPlayManager.CanPlayCard(view.CardData));
+                // Affordability no longer greys/disables the card: an unaffordable card stays
+                // interactive so the player can still pick it up, and we blink its cost red on use.
+                // Only the card-play animation lock actually disables interaction here.
+                view.SetInteractable(!_playingCardAnimation);
+                if (_cardPlayManager != null)
+                {
+                    view.SetAffordable(_cardPlayManager.CanAffordCard(view.CardData));
+                }
             }
         }
 
@@ -239,6 +475,15 @@ namespace DraftCards.UI
         {
             if (_cardPlayManager == null || _playingCardAnimation)
             {
+                return;
+            }
+
+            // Can't afford it: keep the card in hand and call attention to the MP pool (blink red +
+            // zoom + shake) instead of refusing silently. (Unit cards are free, so this only ever
+            // fires for spell/support cards.)
+            if (card != null && !_cardPlayManager.CanAffordCard(card))
+            {
+                PlayMpDeniedFeedback();
                 return;
             }
 
@@ -324,6 +569,11 @@ namespace DraftCards.UI
             {
                 Debug.Log($"[UIManager] Cannot play {card.cardName}, snapping back");
                 view.SnapBackToLayout();
+                // If MP is the reason, call attention to the MP pool so the player sees why it bounced.
+                if (!_cardPlayManager.CanAffordCard(card))
+                {
+                    PlayMpDeniedFeedback();
+                }
                 return;
             }
 
@@ -342,6 +592,32 @@ namespace DraftCards.UI
             if (CardPlayManager.RequiresLaneTarget(card) && !targetLane.HasValue)
             {
                 Debug.Log("[UIManager] Lane-target spell dropped off-lane — cancelling");
+                view.SnapBackToLayout();
+                return;
+            }
+
+            // Player-ally-line buff spells (Rally, Quick Shield, Barrier, Duplicated) need a player
+            // unit to act on. The nearest-band fallback in FindPlayerLaneAtScreenPoint always yields
+            // a lane even with an empty player side, so without this the spell would resolve and waste
+            // MP on nothing. Treat the drop as a cancel when there's no on-field unit or pending build.
+            if (CardPlayManager.RequiresLaneTarget(card) && !CardPlayManager.TargetsEnemyLane(card)
+                && _battlefieldView != null && !_battlefieldView.HasAnyPlayerPresence)
+            {
+                Debug.Log("[UIManager] Player-line spell with no player units — cancelling");
+                view.SnapBackToLayout();
+                return;
+            }
+
+            // Deferred-modal spells (Upgrade Unit, Emergency Draft) only OPEN a picker on play —
+            // no MP is spent and the card stays in hand until the player confirms (CommitUpgrade /
+            // CommitEmergencyDraft) or cancels. So unlike instant spells, the view must NOT be
+            // detached and fade-destroyed here; we raise the modal and snap the card back into the
+            // fan. On confirm, OnCardPlayed → RefreshHand rebuilds the hand without it; on cancel it
+            // simply stays. (Destroying it here made a cancel look like the card vanished.)
+            if (CardPlayManager.IsUpgradeUnitCard(card) || CardPlayManager.IsEmergencyDraftCard(card))
+            {
+                bool opened = _cardPlayManager.TryPlayCard(card, targetLane, consume: true);
+                Debug.Log($"[UIManager] Deferred-modal spell {card.cardName} opened={opened}");
                 view.SnapBackToLayout();
                 return;
             }

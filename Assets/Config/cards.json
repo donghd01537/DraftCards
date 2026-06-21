@@ -12,14 +12,19 @@
       "count": 3,
       "line": "Front",
       "moveSpeed": 230,
-      "attackRange": 80,
+      "attackRange": 60,
       "attackCooldown": 1.2,
       "attackSpeed": 1.8,
       "unitType": "Ground",
       "familyRootId": "swordsman_3",
       "evolution": [
         { "statMultiplier": 1.10 },
-        { "statMultiplier": 1.0, "evolveToId": "spartan_3" }
+        {
+          "branches": [
+            { "statMultiplier": 1.0, "evolveToId": "spartan_3" },
+            { "statMultiplier": 1.0, "evolveToId": "holy_knight_3" }
+          ]
+        }
       ]
     },
     {
@@ -32,9 +37,26 @@
       "count": 3,
       "line": "Front",
       "moveSpeed": 253,
-      "attackRange": 88,
+      "attackRange": 66,
       "attackCooldown": 1.2,
       "attackSpeed": 1.98,
+      "unitType": "Ground",
+      "familyRootId": "swordsman_3",
+      "excludeFromInitialDeck": true
+    },
+    {
+      "id": "holy_knight_3",
+      "name": "Holy Knight x3",
+      "characterFolder": "Holy Knight",
+      "spriteFile": "Units/Holy Knight_3.png",
+      "attack": 116,
+      "hp": 3200,
+      "count": 3,
+      "line": "Front",
+      "moveSpeed": 240,
+      "attackRange": 64,
+      "attackCooldown": 1.2,
+      "attackSpeed": 1.85,
       "unitType": "Ground",
       "familyRootId": "swordsman_3",
       "excludeFromInitialDeck": true
@@ -70,7 +92,28 @@
       "attackRange": 260,
       "attackCooldown": 1.4,
       "attackSpeed": 1.8,
-      "unitType": "Ground"
+      "unitType": "Ground",
+      "projectileSprite": "HolyBolt.png",
+      "projectileSpeed": 650,
+      "projectileAoeRadius": 0,
+      "healEveryAttacks": 3,
+      "healAmount": 140
+    },
+    {
+      "id": "mage_3",
+      "name": "Mage x3",
+      "characterFolder": "Mage",
+      "spriteFile": "Units/Mage_3.png",
+      "attack": 130,
+      "hp": 850,
+      "count": 3,
+      "line": "Back",
+      "moveSpeed": 240,
+      "attackRange": 320,
+      "attackCooldown": 1.5,
+      "attackSpeed": 1.6,
+      "unitType": "Ground",
+      "projectileAoeRadius": 90
     }
   ],
 
@@ -83,7 +126,7 @@
       "hp": 900,
       "line": "Front",
       "moveSpeed": 280,
-      "attackRange": 70,
+      "attackRange": 52,
       "attackCooldown": 0.8,
       "attackSpeed": 1.8,
       "unitType": "Ground"
@@ -112,7 +155,7 @@
       "hp": 2600,
       "line": "Front",
       "moveSpeed": 235,
-      "attackRange": 85,
+      "attackRange": 64,
       "attackCooldown": 1.35,
       "attackSpeed": 2.0,
       "unitType": "Ground"
@@ -123,12 +166,12 @@
       "enemyFolder": "Wolf Rider",
       "attack": 95,
       "hp": 1700,
-      "line": "Front",
+      "line": "Middle",
       "moveSpeed": 320,
-      "attackRange": 80,
+      "attackRange": 60,
       "attackCooldown": 0.9,
       "attackSpeed": 2.2,
-      "unitType": "Ground"
+      "unitType": "Cavalry"
     },
     {
       "id": "shaman",
@@ -144,7 +187,9 @@
       "unitType": "Ground",
       "projectileSprite": "Magic.png",
       "projectileSpeed": 420,
-      "projectileAoeRadius": 0
+      "projectileAoeRadius": 0,
+      "healEveryAttacks": 3,
+      "healAmount": 120
     },
     {
       "id": "cyclop",
@@ -162,6 +207,22 @@
       "projectileSpeed": 330,
       "projectileAoeRadius": 140,
       "shadowScale": 1.3
+    },
+    {
+      "id": "thunder_bird",
+      "name": "Thunder Bird",
+      "enemyFolder": "Thunder Bird",
+      "attack": 110,
+      "hp": 2200,
+      "line": "Back",
+      "moveSpeed": 300,
+      "attackRange": 380,
+      "attackCooldown": 1.0,
+      "attackSpeed": 1.6,
+      "unitType": "Flying",
+      "projectileSprite": "LightningBolt.png",
+      "projectileSpeed": 560,
+      "projectileAoeRadius": 0
     }
   ],
 
@@ -271,11 +332,11 @@
     {
       "id": "barrier",
       "name": "Barrier",
-      "mpCost": 4,
-      "area": "Ally line",
+      "mpCost": 5,
+      "area": "All allies",
       "spellType": "Defense",
-      "shortDescription": "Give a medium shield to one ally line.",
-      "description": "Give medium shield to all units in selected ally line.",
+      "shortDescription": "Give a medium shield to all allies.",
+      "description": "Give medium shield to all ally units on the field.",
       "effectType": "ShieldPlayerLine",
       "value": 4.0,
       "spriteFile": "Spells/Barrier.png"

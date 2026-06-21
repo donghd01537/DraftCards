@@ -204,8 +204,8 @@ namespace DraftCards.EditorTools
         {
             GameObject area = NewUIObject(name, parent);
             RectTransform rect = area.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(leftAnchor, 0.42f);
-            rect.anchorMax = new Vector2(rightAnchor, 0.73f);
+            rect.anchorMin = new Vector2(leftAnchor, 0.34f);
+            rect.anchorMax = new Vector2(rightAnchor, 0.8f);
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
@@ -240,13 +240,6 @@ namespace DraftCards.EditorTools
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
-            // TODO: remove later — debug label so the Front/Middle/Back lanes are visible during development.
-            string label = $"{(isPlayerSide ? "P" : "E")} {line}";
-            TMP_Text title = BuildText(go.transform, "Title", label, 28, TextAlignmentOptions.Center, GameFontRole.Title);
-            title.rectTransform.sizeDelta = new Vector2(0, 40);
-            title.color = new Color(1f, 1f, 1f, 0.6f);
-            title.fontStyle = TMPro.FontStyles.Bold;
-
             GameObject unitContainerGo = NewUIObject("UnitContainer", go.transform);
             VerticalLayoutGroup unitLayout = unitContainerGo.AddComponent<VerticalLayoutGroup>();
             unitLayout.spacing = 6;
@@ -261,7 +254,6 @@ namespace DraftCards.EditorTools
             WireSerialized(view,
                 ("_line", line),
                 ("_isPlayerSide", isPlayerSide),
-                ("_titleText", title),
                 ("_unitContainer", unitContainerGo.transform));
             return view;
         }

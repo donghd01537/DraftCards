@@ -26,5 +26,11 @@ namespace DraftCards.Data
 
         // Multiplier on the ground shadow size (1 = default). Larger for big units.
         public float shadowScale = 1f;
+
+        // Support healer (Cleric / Shaman): after every `healEveryAttacks` normal attacks,
+        // the unit heals every living ally on its own side — itself included — for `healAmount`
+        // HP. 0 for either field disables healing. The counter resets each battle.
+        public int healEveryAttacks = 0;
+        public int healAmount = 0;
     }
 }

@@ -101,6 +101,7 @@ namespace DraftCards.UI
 
                 CardView view = Instantiate(_cardViewPrefab, _cardListContainer);
                 view.Bind(currentCard);
+                view.DisableHoverLift();
                 view.SetInteractable(true);
                 RectTransform rect = (RectTransform)view.transform;
                 rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -111,7 +112,7 @@ namespace DraftCards.UI
                 view.RecordLayoutPose();
 
                 string capturedRoot = rootId;
-                view.OnClicked += (_, _) => Confirm(capturedRoot);
+                view.OnClicked += (_, _) => OnFamilyChosen(capturedRoot);
 
                 AddHintLabel(rect, UpgradeHint(step));
                 _spawnedCards.Add(view);
@@ -127,18 +128,94 @@ namespace DraftCards.UI
 
         private static string UpgradeHint(UpgradeManager.UpgradeStep step)
         {
+            if (step.IsBranchChoice)
+            {
+                // Show the available evolution paths, e.g. "→ Spartan / Holy Knight".
+                string names = string.Join(" / ", BranchNames(step));
+                return $"→ {names}";
+            }
             if (step.IsEvolution && step.EvolvedCard != null)
             {
                 return $"→ {step.EvolvedCard.cardName}";
             }
             int pct = Mathf.RoundToInt((step.IncrementalMultiplier - 1f) * 100f);
-            return $"+{pct}% all stats";
+            return step.HpAttackOnly ? $"+{pct}% HP / ATK" : $"+{pct}% all stats";
         }
 
-        private void Confirm(string familyRootId)
+        private static List<string> BranchNames(UpgradeManager.UpgradeStep step)
+        {
+            List<string> names = new();
+            if (step.BranchOptions != null)
+            {
+                foreach (CardData option in step.BranchOptions)
+                {
+                    if (option != null) names.Add(option.cardName);
+                }
+            }
+            return names;
+        }
+
+        // A family was picked. If its next upgrade is a single path, commit immediately. If it
+        // branches (e.g. Spartan vs Holy Knight), open a second pick listing the options instead.
+        private void OnFamilyChosen(string familyRootId)
         {
             if (_pendingCard == null) { Close(); return; }
-            _cardPlayManager.CommitUpgrade(_pendingCard, familyRootId);
+
+            UpgradeManager upgradeManager = _cardPlayManager.UpgradeManager;
+            UpgradeManager.UpgradeStep step = upgradeManager != null
+                ? upgradeManager.PreviewNext(familyRootId)
+                : default;
+
+            if (step.Valid && step.IsBranchChoice)
+            {
+                OpenBranchChoice(familyRootId, step);
+                return;
+            }
+
+            Confirm(familyRootId, chosenEvolveToId: null);
+        }
+
+        // Second-stage picker: replaces the family row with one card per branch option for the
+        // chosen family. Picking one commits the upgrade down that branch; Cancel still aborts.
+        private void OpenBranchChoice(string familyRootId, UpgradeManager.UpgradeStep step)
+        {
+            ClearCards();
+
+            if (_titleText != null) _titleText.text = "CHOOSE AN EVOLUTION";
+
+            IReadOnlyList<CardData> options = step.BranchOptions;
+            int count = options.Count;
+            float startX = -(count - 1) * 0.5f * _cardSpacing;
+            for (int i = 0; i < count; i++)
+            {
+                CardData option = options[i];
+                if (option == null) continue;
+
+                CardView view = Instantiate(_cardViewPrefab, _cardListContainer);
+                view.Bind(option);
+                view.DisableHoverLift();
+                view.SetInteractable(true);
+                RectTransform rect = (RectTransform)view.transform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = new Vector2(startX + i * _cardSpacing, 0f);
+                rect.localRotation = Quaternion.identity;
+                rect.localScale = Vector3.one;
+                view.RecordLayoutPose();
+
+                string capturedRoot = familyRootId;
+                string capturedEvolveId = option.cardId;
+                view.OnClicked += (_, _) => Confirm(capturedRoot, capturedEvolveId);
+
+                AddHintLabel(rect, $"→ {option.cardName}");
+                _spawnedCards.Add(view);
+            }
+        }
+
+        private void Confirm(string familyRootId, string chosenEvolveToId)
+        {
+            if (_pendingCard == null) { Close(); return; }
+            _cardPlayManager.CommitUpgrade(_pendingCard, familyRootId, chosenEvolveToId);
             _pendingCard = null;
             CloseImmediate();
         }

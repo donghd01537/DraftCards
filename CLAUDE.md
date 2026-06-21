@@ -30,6 +30,7 @@ If you add a new system, add or update a doc for it and cross-link it from the r
 
 ## Building & verifying
 
+- **Don't verify or build — the user does that manually.** Make the code change, state that it's unverified, and stop. Don't attempt to compile, run the editor, or launch the app to confirm.
 - This repo has **no .NET SDK on the command line** — code compiles inside the Unity editor. Don't claim a change compiles unless it was built in Unity; say it's unverified otherwise.
 - After changing the card roster or enemy stats, the user must run **DraftCards → Create Starter Cards** to regenerate assets.
 - This is **not a git repository** — there's no commit history to lean on.

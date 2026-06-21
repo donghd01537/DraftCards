@@ -52,11 +52,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DraftCards.UI.UnitGroupView
   _spriteContainer: {fileID: 7542419131551723422}
   _shadow: {fileID: 6956649179531533097}
+  _shadowExtraDrop: 0
   _spriteScale: 0.47
   _previewTint: {r: 1, g: 1, b: 1, a: 1}
   _hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
   _hitFlashDuration: 0.12
   _hitFlashPeak: 0.2
+  _walkForwardLean: 5
+  _walkSwayAngle: 4
+  _walkSwaySpeed: 18
+  _walkBobHeight: 4.5
   _shieldColor: {r: 0.45, g: 0.8, b: 1, a: 0.45}
 --- !u!1 &2528020135989924257
 GameObject:

@@ -6,7 +6,7 @@ This document explains the battlefield: how units get there, how they fight, and
 
 The game opens in `Scenes/HomeScene.unity` — a title screen whose **Start** button calls [HomeScreen.StartGame](../Assets/Scripts/UI/HomeScreen.cs), which loads `BattlePrototype` (the battle scene below) via `SceneManager.LoadScene`. Both scenes are registered in Build Settings (HomeScene first, so builds boot to the title screen). The battle starts immediately on load — `GameManager.Start()` kicks off the round loop.
 
-Design target: a full stage should begin with deck and Commander preparation, then run through about 8-10 enemy waves. The current prototype starts directly from the generated player deck and uses 6 scripted waves that loop indefinitely.
+Design target: a full stage should begin with deck and Commander preparation, then run through about 8-10 enemy waves. The current prototype starts directly from the generated player deck and uses 8 scripted waves that loop indefinitely.
 
 ## Two Layers: Logic vs. Visuals
 
@@ -57,9 +57,10 @@ See [Cards.md](Cards.md) for the player-facing draft and reset rules this loop i
 
 A lane is a [FormationLineView](../Assets/Scripts/UI/FormationLineView.cs) placed in the scene — a `RectTransform` marking where a `FormationLine` (`Back` / `Middle` / `Front`) sits for one side. `BattlefieldView` holds two arrays, `_playerLines` and `_enemyLines`, each with one view per line.
 
-- `FindLine(isPlayer, line)` looks up the lane view; `LaneAnchoredPosition` converts its world position into the battlefield's local coordinate space.
+- `FindLine(isPlayer, line)` looks up the lane view; `LaneAnchoredPosition` converts its world position into the battlefield's local coordinate space. The 3 lanes per side carry `anchoredPosition (0,0)` in the scene — their X is supplied at runtime by the `HorizontalLayoutGroup` on the parent area. Because the **first** wave spawns from `GameManager.Start()` on the scene-load frame, *before* Unity's end-of-frame layout pass, `LaneAnchoredPosition` calls `EnsureLanesLaidOut()` (a one-time `Canvas.ForceUpdateCanvases` + `LayoutRebuilder.ForceRebuildLayoutImmediate` on each area) first; without it Back/Middle/Front all resolve to the same point and the Back archer spawns inside the Front cluster.
 - The scene has **6 lane views** total (3 player + 3 enemy). If a wave targets a lane with no matching view, units fall back to position `(0,0)`.
-- Enemy `BattleUnit`s are mirrored: their `localScale.x` is negated in `SpawnUnitView` so they face left.
+- **Where the two armies sit** is set in the scene by the `PlayerArea` / `EnemyArea` RectTransform anchors (each holds its 3 lanes in a `HorizontalLayoutGroup`). They're anchored toward the screen center (player X ≈ 0.10–0.42, enemy ≈ 0.58–0.90 of a 1920×1080 canvas) so the armies nearly meet, leaving only a small no-man's-land — widen/narrow the gap by moving these anchors, not in code. The vertical band is `y 0.34–0.80` of the canvas, sized to fill the playable sand strip of the battlefield background; the movement-clamp bounds above are the gameplay limits **within** that band.
+- **Facing is dynamic.** Each unit flips to face the way it moves or attacks: `BattleUnit.Update` picks a horizontal facing (toward the target while attacking, else the velocity's X) past a small `_facingDeadzone`, and calls `UnitGroupView.SetFacing`, which flips the **sprite container's** X scale (not the unit root — so it never fights the heal/level-up scale pulses or the move bounce). The source art faces right, so players start facing right and enemies left (`SpawnUnitView` seeds it via `SetFacing(forPlayer)`); from then on it's driven by motion. This matters for cavalry, which attack the backline from odd angles and would otherwise strike backwards.
 
 Everything lives under `_battleFieldRoot` (a `RectTransform`) and uses `anchoredPosition`. Positions are clamped to `_battleBoundsMin`/`_battleBoundsMax` via `ClampToBounds`.
 
@@ -80,7 +81,7 @@ Previews are real `BattleUnit`s bound via `UnitGroupView.BindPreview` (tinted, i
 
 ### Positioning
 - `FindEmptyPosition` — random point within the lane (`±_laneHalfWidth × ±_laneHalfHeight`) that is at least `_spawnMinDistance` from every other unit, retried up to `_spawnMaxAttempts` times, else a random fallback.
-- `BuildPackedPositions` / `PackedOffset` — deterministic packing used for previews and regroup: vertical-first stacking that branches into side columns (`_packXSpacing` × `_packYSpacing`).
+- `BuildPackedPositions` / `PackedOffset` — deterministic packing used for previews and regroup: fills a column top-to-bottom (5 rows), then branches into adjacent side columns, each also filled vertically (`_packXSpacing` × `_packYSpacing`), so a group forms a compact block of short files. `PackedJitter` then adds a small deterministic per-slot offset (~±40% of a cell) so the block reads as a natural mob rather than a ruler-straight grid — same index always yields the same jitter so preview units and the real units they hand off to land on the same spots. (Enemies skip packing entirely; they scatter via `FindEmptyPosition`.)
 - `StartDrop` — a drop-in animation (fall + squash/stretch pop) on spawn.
 
 ## The Battle Simulation
@@ -91,12 +92,26 @@ The whole fight is driven by `BattleUnit.Update()` running per-frame on each act
    - `FindClosestOpponent` picks the nearest living unit on the other side.
    - If farther than `AttackRange`: record a move direction toward it (applied at `EffectiveMoveSpeed` below).
    - If within range: count down `_cooldownTimer`; on zero, `PerformAttack` and reset to `EffectiveAttackCooldown` (= `AttackCooldown / AttackSpeed`).
-2. **Separation** (`ComputeSeparation`) — soft repulsion from nearby units. Allies keep `_allySeparationDistance` apart; enemies use body radii (`_bodyRadius`). This keeps units touching but not overlapping. Pairs at the exact same spot get a deterministic scatter direction. A push against an **ally standing in the move direction** is softened toward `_blockedPushFactor`, so a rear unit presses the back of the line instead of bulldozing it forward.
+   - **Front-rank gating (melee only).** Before attacking, a melee unit (`ProjectileSprite == null`, non-cavalry) asks `IBattleSpatial.IsFrontBlocked(self, target)`: is a living ally standing in the corridor between it and the target, closer to the target than it is? If so it's a rear-rank unit screened by its own front line — it does **not** attack, and keeps pressing toward the target instead. Without this, every unit in a deep mob attacks *through* the bodies ahead (so 16 goblins all hit one front-liner at once) and each also contributes a separation push to the enemy, summing into a line-shoving force. Ranged units (they shoot over heads) and cavalry (flankers) are exempt. The screened unit also gets its cross-side separation push **zeroed** while blocked (`_frontBlocked` in `BattleUnit.ComputeSeparation`), so it packs in behind the front rather than bulldozing it. Corridor tunables live on `BattlefieldView`: `_frontBlockMinAdvance` (how far ahead an ally must be to count) and `_frontBlockCorridor` (half-width of the screening lane).
+2. **Separation** (`ComputeSeparation`) — soft repulsion from nearby units. Allies keep `_allySeparationDistance` apart; enemies use body radii (`_bodyRadius`). This keeps units touching but not overlapping. Pairs at the exact same spot get a deterministic scatter direction. A push against an **ally standing in the move direction** is softened toward `_blockedPushFactor`, so a rear unit presses the back of the line instead of bulldozing it forward. A push against an **opponent** is scaled by `_enemyPushFactor`, so a deep formation can't sum its contact pushes and slide the whole enemy line off the field.
 3. **Settle** — if not yet active but has a settle target (post-spawn/regroup), drift toward it.
 4. **Move** — sum separation + move + settle, **clamp the combined speed to `_maxSpeed`** (so a pile-up of pushes can't fling a unit across the field), then apply, clamped to bounds. A debounced moving/idle flag drives the walk bounce via `MoveBounceAnimator`.
 
 ### Attacking & damage
-`PerformAttack` plays the attack frame animation (`UnitGroupView.PlayAttack`) and either calls `target.TakeDamage(Group.TotalDamage)` immediately for melee units, or launches the configured projectile sprite and applies damage on impact. `TotalDamage = Attack × Count` (Count is 1, so it's just `Attack`). `BattleUnit.TakeDamage` applies it to the `UnitGroup`; if HP hits 0, it notifies death. Direct projectiles such as arrows calculate one intercept point from the target's current velocity, fly there at fixed speed, and can miss if the target moves away; lobbed projectiles with `projectileAoeRadius > 0` deal splash damage around the impact point.
+`PerformAttack` plays the attack frame animation (`UnitGroupView.PlayAttack`) and either calls `target.TakeDamage(Group.TotalDamage)` immediately for melee units, launches the configured projectile sprite and applies damage on impact, or for Thunder Bird calls a small top-down lightning strike attack. `TotalDamage = Attack × Count` (Count is 1, so it's just `Attack`). `BattleUnit.TakeDamage` applies it to the `UnitGroup`; if HP hits 0, it notifies death. Direct projectiles such as arrows calculate one intercept point from the target's current velocity, fly there at fixed speed, and can miss if the target moves away; lobbed projectiles with `projectileAoeRadius > 0` deal splash damage around the impact point.
+
+### Cavalry skirmishers
+
+Most units chase the **nearest** living opponent (`FindClosestOpponent`). A unit whose `UnitType` is `Cavalry` (Wolf Rider) behaves differently in two ways:
+
+- **Targeting** — it goes for the enemy **backline**, by priority tier in `BattlefieldView.FindClosestOpponent`: (1) **enemy Cavalry** — if both sides field cavalry, they clash in the open *first*; (2) **Back** line — the intended prize; (3) **Middle**; (4) **Front** as a last resort so it never idles. Each tier takes the closest member. The filter is general (works for cavalry on either side).
+- **Approach (flank charge)** — instead of running straight into the front line, it sweeps out to the nearest top/bottom **runway** edge, crosses the contact line *there* (where there are no front-liners), then dives in at its Middle/Back target. This is a movement-shaping state machine in `BattleUnit` (`FlankPhase` / `TryGetFlankDir`). **Cavalry have their own movement bounds.** Line units are clamped to the tight infantry band (`_battleBoundsMin/Max`, the dense strip the formation occupies); cavalry are clamped to a much taller **runway** band (`_cavalryBoundsMin/Max`) that reaches into the empty space above and below the army. That runway *is* the visible top/bottom lane the player sees cavalry ride through, and `TryGetFlankDir` sweeps along **its** edge (not the infantry band's). The cavalry-aware clamp is `IBattleSpatial.ClampToBounds(pos, forCavalry)`; `BattleUnit.IsCavalry` selects it for movement and settling. On activation a cavalry unit enters `Arcing` and latches its edge (whichever of top/bottom it spawned nearer) and a contact line (the X midpoint between it and the target). It then steers along **one continuous curve** (not two hard legs, which used to kink into a right angle): the X (cross) and Y (swing-out) weights are blended with a smootherstep against how far it has climbed toward the edge, so it leaves mostly vertical, rounds the corner gradually, and arrives mostly horizontal. `_flankEdgeBand` is the Y window near the edge within which the curve has fully blended to the horizontal cross — a larger band rounds the corner sooner/more gently (raised now the runway is taller). Once it crosses the contact line (onto the target's side) the arc is spent (`Done`) and it resumes normal chasing for the final dive. Tunables on `BattleUnit`: `_flankEdgeReach`, `_flankEdgeInset`, `_flankEdgeBand`. The flank only shapes the *approach*; it never changes combat or targeting, and it re-plans each battle (reset in `SetActive`) so a regrouped survivor flanks fresh. **Cavalry-vs-cavalry:** when the chosen target is itself cavalry, the arc is skipped (`targetIsCavalry` guard) and the unit charges straight — the two skirmishers duel in the open. A survivor that then retargets a line unit flanks normally (the arc wasn't consumed during the duel).
+
+Cavalry are deployed on the **Middle** line (behind their own front melee, but still pushing forward) so the flank charge starts from just behind the wall. The type is parsed from `unitType` in [cards.json](../Assets/Config/cards.json) and flows through `UnitData` → `PendingUnitBuild` → `UnitGroup.UnitType` like any other stat. Movement bounds for the arc come from `IBattleSpatial.BattleBoundsMin/Max`.
+
+### Support healers (Cleric / Shaman)
+
+Some units are **support healers**. After every `HealEveryAttacks` normal attacks (counted per unit, reset at battle start in `SetActive`), the unit heals **one ally — the most-hurt living unit on its own side by HP fraction, with the healer itself eligible** — for `HealAmount` HP (a single Cleric heals a single unit, not the whole line). The cadence/amount come from the card data (`UnitData.healEveryAttacks` / `healAmount` in [cards.json](../Assets/Config/cards.json)), flow through `PendingUnitBuild` onto `UnitGroup` (`IsHealer`, `HealEveryAttacks`, `HealAmount`), and fire from `BattleUnit.PerformAttack`. The heal itself is `UnitGroup.Heal` (caps at max HP, won't resurrect the dead); the target pick + the green `UnitGroupView.PlayHealPulse` cue with small floating plus signs live in `BattlefieldView.HealAlly` (`IBattleSpatial`). The side-wide `HealAllies` is kept on the interface for possible later use (e.g. a group-heal spell) but isn't wired to anything. The Cleric (player) and the Shaman (enemy) both use this — the Shaman heals the enemy army, the Cleric the player army. Counting happens on the attack **swing**, so it works the same for the ranged Cleric and Shaman regardless of projectile travel time.
 
 The melee swing plays for a **fixed** `_meleeAttackDuration` (clamped below the cooldown), not a fraction of it — otherwise fast attackers (e.g. a Goblin at a 0.4s effective cooldown) flash the strike pose for a tenth of a second and look idle while swarming. Ranged throwers use the analogous fixed `_projectileThrowDuration` instead.
 
@@ -123,12 +138,14 @@ Enemies are not drafted — `GameManager` scripts them per round in a static `_w
 
 | Round | Composition |
 |---|---|
-| 1 | 8 Goblin (Front) |
-| 2 | 8 Goblin (Front) + 2 Goblin Archer (Back) |
-| 3 | 12 Goblin (Front) + 2 Goblin Archer (Back) |
-| 4 | 1 Orc + 8 Goblin (Front) + 2 Goblin Archer (Back) |
-| 5 | 2 Orc + 8 Goblin (Front) + 1 Shaman (Middle) + 4 Goblin Archer (Back) |
-| 6 | 2 Orc + 2 Wolf Rider + 8 Goblin (Front) + 2 Shaman (Middle) + 4 Goblin Archer + 1 Cyclop (Back) |
+| 1 | 10 Goblin (Front) + 1 Goblin Archer (Back) |
+| 2 | 10 Goblin (Front) + 2 Wolf Rider (Middle) + 3 Goblin Archer (Back) |
+| 3 | 2 Orc + 10 Goblin (Front) + 4 Wolf Rider (Middle) + 4 Goblin Archer (Back) |
+| 4 | 3 Orc + 10 Goblin (Front) + 2 Shaman + 6 Wolf Rider (Middle) + 4 Goblin Archer (Back) |
+| 5 | 4 Orc + 12 Goblin (Front) + 3 Shaman + 8 Wolf Rider (Middle) + 5 Goblin Archer (Back) |
+| 6 | 4 Orc + 14 Goblin (Front) + 3 Shaman + 8 Wolf Rider (Middle) + 5 Goblin Archer + 2 Thunder Bird (Back) |
+| 7 | 5 Orc + 14 Goblin (Front) + 3 Shaman + 8 Wolf Rider (Middle) + 5 Goblin Archer + 1 Cyclop (Back) |
+| 8 | 6 Orc + 16 Goblin (Front) + 4 Shaman + 10 Wolf Rider (Middle) + 6 Goblin Archer + 2 Cyclop + 3 Thunder Bird (Back) |
 
 `SpawnWave` loads each enemy `CardData` by id from the **`Resources/Enemies`** folder (kept separate from `Resources/Cards` so enemies never enter the player deck), builds a `PendingUnitBuild` per spawn, and places `count` enemy `UnitGroup`s into the given lane. To change difficulty, edit the `_waves` table (lanes/counts) in [GameManager](../Assets/Scripts/Managers/GameManager.cs) and the per-enemy stats in [Assets/Config/cards.json](../Assets/Config/cards.json) (see the enemy roster in [Cards.md](Cards.md)).
 
@@ -146,7 +163,7 @@ Spell cards act on units already on the field, pending previews, or battlefield-
 - **Lightning Strike** (`LightningStrikePriorityEnemies`) arms battle-start strikes against high-priority living enemies, favoring support/ranged/backline threats.
 - **Duplicated** (`DuplicatePlayerUnits`) clones every current unit from a selected player lane for the current battle only, including pending first-wave preview units before FIGHT.
 
-These spells play a `SpawnEffect` floating-text burst at the affected lane/center or impact point.
+These spells play a `SpellBurst` icon burst at the affected lane/center or impact point. The battlefield is **text-free** — feedback reads by icon silhouette and color, not words.
 
 ### Battlefield VFX conventions
 
@@ -159,10 +176,12 @@ Spell and unit-feedback VFX are visual-only. They should not change `UnitGroup` 
 
 Current examples:
 
-- `SpawnEffect` - floating text / smoke bursts for spell labels.
+- `SpellBurst` - the text-free spell feedback: an expanding glow ring plus a procedural icon (shield / up-arrow / down-arrow / crosshair / snowflake / plus / bolt / swirl) keyed per spell, so the player reads *which* spell fired by silhouette and color. Replaces the old floating word labels (SHIELD, +50% ATK, ZAP 40, …).
+- `SpawnEffect` - legacy floating text / smoke burst (no longer used on the battlefield; kept for reference).
 - `BattlefieldMarkVfx` in `BattlefieldView` - Mark feedback: one shrinking aim reticle over the selected enemy lane.
 - `BattlefieldLevelUpVfx` in `BattlefieldView` - Upgrade Unit feedback: one golden group VFX at the affected family's center plus `UnitGroupView.PlayLevelUpPulse()` on each affected unit/preview.
 - Lightning helpers in `BattlefieldView` - procedural beam, burst, branches, and impact ring.
+- `GroundCrackVfx` in `Projectile` - Cyclop rock impact feedback: procedural cracks, dust, and shock ring at the lobbed projectile's impact point.
 
 ## Key Tunables
 
@@ -170,16 +189,18 @@ All on `BattlefieldView` unless noted:
 
 | Field | Default | Controls |
 |---|---|---|
-| `_laneHalfWidth` / `_laneHalfHeight` | 90 / 180 | Random spawn box per lane. |
-| `_spawnMinDistance` | 55 | Min gap between units when finding a free spot. |
-| `_packXSpacing` / `_packYSpacing` | 38 / 34 | Packed-formation cell size. |
-| `_battleBoundsMin` / `_battleBoundsMax` | (-900,-40)/(900,220) | Hard movement clamp. |
+| `_laneHalfWidth` / `_laneHalfHeight` | 70 / 150 | Random spawn box per lane. |
+| `_spawnMinDistance` | 40 | Min gap between units when finding a free spot. |
+| `_packXSpacing` / `_packYSpacing` | 30 / 26 | Packed-formation cell size. Tight; 5-row columns plus per-slot jitter give a natural block — see `PackedOffset` / `PackedJitter`. |
+| `_battleBoundsMin` / `_battleBoundsMax` | (-1000,-120)/(1000,320) | **Infantry** movement clamp — the band the formation occupies. Widened to fill more of the new background's sand strip. |
+| `_cavalryBoundsMin` / `_cavalryBoundsMax` | (-1000,-260)/(1000,440) | **Cavalry** movement clamp — a taller runway reaching into the empty space just above/below the infantry band (but kept within the visible sand strip, not the screen edges), the lane cavalry flank along. Kept distinctly taller than the infantry band so Wolf Riders still ride around the outside. |
 | `_maxBattleSeconds` *(GameManager)* | 30 | Battle timeout. |
 | `_postBattlePause` *(GameManager)* | 0.5 | Pause after a battle resolves. |
-| `_allySeparationDistance` *(BattleUnit)* | 67 | How far allies stand apart. |
+| `_allySeparationDistance` *(BattleUnit)* | 46 | How far allies stand apart. |
 | `_separationStrength` *(BattleUnit)* | 420 | Repulsion force strength. |
 | `_maxSpeed` *(BattleUnit)* | 420 | Cap on combined per-frame speed; stops pile-up shoving. 0 disables. |
 | `_blockedPushFactor` *(BattleUnit)* | 0.35 | How much an ally directly ahead is pushed (1 = full, 0 = none). |
+| `_enemyPushFactor` *(BattleUnit)* | 0.4 | How much an opponent is pushed by separation (1 = full, 0 = none). Lower it so a big formation can't shove enemies off the field. |
 | `_meleeAttackDuration` *(BattleUnit)* | 0.28 | Fixed melee swing length (clamped below cooldown). |
 
 ## File Map

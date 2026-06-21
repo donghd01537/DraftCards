@@ -31,6 +31,12 @@ namespace DraftCards.Cards
         public UnitType unitType;
         public float shadowScale = 1f;
 
+        // Support healer cadence/amount (Cleric / Shaman). After every `healEveryAttacks`
+        // normal attacks the unit heals all living allies on its side for `healAmount` HP.
+        // 0 for either disables it. See BattleUnit.PerformAttack / IBattleSpatial.HealAllies.
+        public int healEveryAttacks;
+        public int healAmount;
+
         // Fortify shield window (seconds) to grant the summoned unit, if a Fortify spell
         // was cast on a pending front-line build. 0 means no shield.
         public float shieldDuration;
@@ -67,6 +73,8 @@ namespace DraftCards.Cards
             projectileAoeRadius = unitCard.unitData.projectileAoeRadius;
             unitType = unitCard.unitData.unitType;
             shadowScale = unitCard.unitData.shadowScale > 0f ? unitCard.unitData.shadowScale : 1f;
+            healEveryAttacks = unitCard.unitData.healEveryAttacks;
+            healAmount = unitCard.unitData.healAmount;
             appliedCards.Add(unitCard);
         }
     }
